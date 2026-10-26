@@ -12,11 +12,13 @@
 
 | 项目 | 版本 / 要求 |
 | --- | --- |
-| 插件 | **0.1.3** |
-| DeepSeek Harness | **0.2.0-rc.2** |
-| DSH 使用的 pi-ai | **0.87.1**（由宿主提供） |
+| 插件 | **0.1.4** |
+| DeepSeek Harness | **0.2.1-rc.3** 起的 0.2.1 预发布版及正式版；保留 **0.2.0-rc.2** 支持 |
+| DSH 使用的 pi-ai | **1.1.x** 或 **0.87.1**，由宿主提供 |
 | 已验证的桌面环境 | macOS；其他平台尚未验证 |
 | ChatGPT 账号 | 具备 OpenAI 当前允许的套餐接入资格，并同意应用使用套餐 |
+
+本次实际测试使用 DSH **0.2.1-rc.3** 和 pi-ai **1.1.0**。范围内的后续版本获准加载，但尚未实测；DSH **0.2.0-rc.2** / pi-ai **0.87.1** 保留此前支持，本次未重新进行动态测试。
 
 模型与限制以 OpenAI 为该账号返回的结果为准。图标中的 “ChatGPT Pro Plan” 是插画文字，不表示仅支持 Pro，也不表示包含无限额度。DSH 升级后需要重新核对兼容性。
 
@@ -24,13 +26,13 @@
 
 ## 安装
 
-从 [v0.1.3 Releases](https://github.com/WillQvQ/dsh-chatgpt-plan/releases/tag/v0.1.3) 下载 **`dsh-chatgpt-plan-0.1.3.tgz`**。使用这个插件包；GitHub 自动生成的 Source code 压缩包用于查看源码。
+本分支的插件版本为 **0.1.4**。请使用 **`dsh-chatgpt-plan-0.1.4.tgz`**；若 [Releases](https://github.com/WillQvQ/dsh-chatgpt-plan/releases) 尚未提供该版本，请按下方[从源码打包与开发](#从源码打包与开发)从包含本修复的检出版本打包。GitHub 自动生成的 Source code 压缩包用于查看源码，不能直接当作插件包安装。
 
 先完全退出 DSH。在 macOS 终端执行以下命令（假设文件保存在下载目录，App 安装在 `/Applications`）：
 
 ```sh
 "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
-  plugin --profile desktop add "$HOME/Downloads/dsh-chatgpt-plan-0.1.3.tgz"
+  plugin --profile desktop add "$HOME/Downloads/dsh-chatgpt-plan-0.1.4.tgz"
 ```
 
 安装过程会解析 `undici` 等运行时依赖，需要能够访问包仓库。不要仅复制单个源码文件。安装完成后重新打开 DSH，确认插件列表中的 `dsh-chatgpt-plan` 已启用。
@@ -81,15 +83,29 @@
 
 | 现象 | 处理方法 |
 | --- | --- |
+| DSH 0.2.1-rc.3 提示插件不兼容 | 升级到 **0.1.4**，完全退出并重新打开 DSH；详见下方兼容性说明 |
 | 设置中没有插件入口 | 确认安装到正在使用的 DSH 配置、插件已启用，再完全退出并重新打开 DSH |
 | 登录成功但没有模型 | 确认已允许套餐使用，刷新模型列表，并检查账号资格及网络 |
 | 浏览器能授权，插件连接失败 | 分别检查浏览器网络和插件网络设置 |
-| 登录页面提示 `Invalid Origin` | 升级到 **0.1.3**、重启 DSH，再重新打开账号管理页；详见下方说明 |
+| 登录页面提示 `Invalid Origin` | 升级到 **0.1.4**、重启 DSH，再重新打开账号管理页；详见下方说明 |
 | 切换账号后模型不可用 | 重新选择新账号实际提供的模型 |
 | 提示授权失效 | 在账号页重新登录，不要复制其他应用的 token 文件 |
 | 提示凭据权限异常 | 检查文件属于当前用户、不是软链接，且只允许所有者读写；不要把账号文件发到 Issue |
-| 恢复目标时提示 `objective and max_goal_rounds are valid only with action edit` | 升级到 **0.1.3** 并重启 DSH；详见下方说明 |
+| 恢复目标时提示 `objective and max_goal_rounds are valid only with action edit` | 升级到 **0.1.4** 并重启 DSH；详见下方说明 |
 | 提示 `stale goal ref` 或 `the model cannot resume a paused goal` | 按下方说明检查目标版本与暂停状态 |
+
+### DSH 0.2.1-rc.3 提示插件不兼容（0.1.4 修复）
+
+0.1.3 的 `peerDependencies` 将 `@deepseek-ai/dsh-llm` 和 `@deepseek-ai/dsh-llm-pi-ai` 精确限定为 `0.2.0-rc.2`。DSH 0.2.1-rc.3 自带的这两个包均为 `0.2.1-rc.3`，因此宿主的兼容性检查会禁用旧版插件。宿主提供的 `@earendil-works/pi-ai` 也已从 `0.87.1` 升为 `1.1.0`，其依赖声明需要同步调整，但它不参与上述 DSH 兼容性检查。
+
+0.1.4 使用有边界的版本范围，避免每次兼容更新都必须单独列出一个版本：
+
+- 两项 DSH peer 均为 `0.2.0-rc.2 || >=0.2.1-rc.3 <0.2.2-0`：保留原版本，并允许从 rc.3 起的 0.2.1 预发布版及 0.2.1 正式版；不接受 0.2.2 的预发布版、正式版或更高版本。
+- pi-ai peer 为 `0.87.1 || ~1.1.0`：保留原版本，并允许 1.1.x 补丁版本；不接受 1.2 或更高版本。
+
+本次实测组合仅为 DSH 0.2.1-rc.3 / pi-ai 1.1.0；范围内的后续版本只是允许加载，尚未实测，旧组合也未在本次重新进行动态测试。验证覆盖宿主原生兼容性检查、临时配置和模拟适配器注册表中的插件初始化，以及模拟网络下的适配器请求；不代表完整桌面端到端验证，本次未重新执行真实账号授权或套餐推理。
+
+升级时先完全退出 DSH，再安装 0.1.4 的 `.tgz` 并重启。无需修改宿主依赖或账号文件。
 
 <a id="sign-in-invalid-origin"></a>
 
@@ -99,7 +115,7 @@
 
 ### 图片与错误恢复（0.1.2 修复）
 
-如果读取图片后出现 `Attachment reference is invalid.`，或本轮运行失败显示 `Cannot read properties of undefined (reading 'includes')`，请升级到 **0.1.3** 并完全重启 DSH，再在原会话中重试。
+如果读取图片后出现 `Attachment reference is invalid.`，或本轮运行失败显示 `Cannot read properties of undefined (reading 'includes')`，请升级到 **0.1.4** 并完全重启 DSH，再在原会话中重试。
 
 旧版本调用 DSH 图片附件函数时传反了路径映射与附件引用参数，导致带图片的模型请求在本地构造阶段失败；同时，插件提供的重试策略缺少错误码列表和退避参数，错误恢复又触发第二次异常，掩盖了原始原因。0.1.2 修正了参数顺序，并使用 DSH 的策略解析器补全重试配置。
 
@@ -115,7 +131,7 @@
 - **`the model cannot resume a paused goal`**：已暂停的目标需要用户在目标界面点击恢复，或在原会话中**单独发送 `/goal resume`**。普通聊天消息“继续”不能替代这条命令。
 - **重启后目标是 `active`，却没有自动续行**：它可能处于 `disarmed`，可用 `/goal resume` 重新启用。`max_goal_rounds` 限制自动续行轮数，每轮内部可以多次调用工具。
 
-这些规则来自当前验证的 DSH 0.2.0-rc.2 的[目标工具](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/goal/tool-goal/README.zh.md)和[用户命令](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/goal/command-goal/README.zh.md)。插件保留这些状态与权限检查。
+这些规则来自此前核对的 DSH 0.2.0-rc.2 的[目标工具](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/goal/tool-goal/README.zh.md)和[用户命令](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/goal/command-goal/README.zh.md)。插件保留这些状态与权限检查。
 
 ## 数据与授权方式
 
@@ -142,7 +158,7 @@
 
 ## pi-ai 依赖关系
 
-**使用本插件不需要另外安装 Pi App。** 本插件复用 DSH 宿主提供的 `@deepseek-ai/dsh-llm-pi-ai` 和 `@earendil-works/pi-ai`；当前验证组合是 DSH **0.2.0-rc.2** 与 pi-ai **0.87.1**，对应版本也声明在本项目的 [peerDependencies](package.json) 中。
+**使用本插件不需要另外安装 Pi App。** 本插件复用 DSH 宿主提供的 `@deepseek-ai/dsh-llm-pi-ai` 和 `@earendil-works/pi-ai`；本次实测组合是 DSH **0.2.1-rc.3** 与 pi-ai **1.1.0**。本项目的 [peerDependencies](package.json) 允许 0.2.1 后续候选版、正式版及 pi-ai 1.1.x 补丁版本，并保留此前支持的 DSH **0.2.0-rc.2** / pi-ai **0.87.1**；允许范围与实际测试范围的区别见上方兼容性说明。
 
 ### DSH 主要在哪里依赖 pi-ai
 
@@ -185,18 +201,20 @@ npm test
 npm pack --ignore-scripts
 ```
 
-`npm test` 使用 Node 内置测试工具和模拟响应，不需要真实账号、互联网或已安装的 DSH 宿主依赖。`npm pack` 生成 `dsh-chatgpt-plan-0.1.3.tgz`，按前述命令安装；实际运行的依赖由 DSH 安装过程解析。
+`npm test` 使用 Node 内置测试工具和模拟响应，不需要真实账号、互联网或已安装的 DSH 宿主依赖。`npm pack` 生成 `dsh-chatgpt-plan-0.1.4.tgz`，按前述命令安装；实际运行的依赖由 DSH 安装过程解析。
 
-测试覆盖账号隔离、PKCE / 身份校验、切换取消、续期退避、401 重试、撤销、存储权限、配置隔离、端口冲突、网络设置和管理页访问控制。在安装了兼容版本 DSH 的 macOS 上，还可运行原生适配器模拟测试：
+测试覆盖账号隔离、PKCE / 身份校验、切换取消、续期退避、401 重试、撤销、存储权限、配置隔离、端口冲突、网络设置和管理页访问控制。在安装了兼容版本 DSH 的 macOS 上，还可运行原生兼容性检查与适配器模拟测试：
 
 ```sh
+ELECTRON_RUN_AS_NODE=1 "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness" \
+  scripts/compatibility-test.mjs
 ELECTRON_RUN_AS_NODE=1 "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness" \
   scripts/wire-test.mjs
 ELECTRON_RUN_AS_NODE=1 "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness" \
   scripts/image-wire-test.mjs
 ```
 
-这两项测试也使用模拟网络。图片测试通过 DSH 原生附件存储、模型适配器和重试执行器，覆盖用户图片、工具截图、无效附件、原始错误保留及最多两次请求重试。另一项测试检查经过 DSH / pi-ai 转换后的请求明确包含 `strict: false`、可选工具参数仍然可选，覆盖账号切换与 401 续期重试。模拟通过不代表任意真实账号都具备接入资格；真实验证需要账号所有者完成授权。
+`compatibility-test.mjs` 使用宿主原生依赖检查，并在临时配置和模拟适配器注册表中验证插件初始化，不启动完整 DSH 桌面环境；`wire-test.mjs` 和 `image-wire-test.mjs` 使用模拟网络。图片测试通过 DSH 原生附件存储、模型适配器和重试执行器，覆盖用户图片、工具截图、无效附件、原始错误保留及最多两次请求重试。另一项测试检查经过 DSH / pi-ai 转换后的请求明确包含 `strict: false`、可选工具参数仍然可选，覆盖账号切换与 401 续期重试。模拟通过不代表任意真实账号都具备接入资格；真实验证需要账号所有者完成授权。
 
 浏览器登录回归测试需要当前 Node 环境能够导入 Playwright，并已安装对应浏览器。例如，使用已安装的 Microsoft Edge：
 

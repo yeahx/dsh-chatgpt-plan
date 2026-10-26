@@ -12,11 +12,13 @@ This is an unofficial local plugin with MIT-licensed source code. Each user auth
 
 | Component | Version / requirement |
 | --- | --- |
-| Plugin | **0.1.3** |
-| DeepSeek Harness | **0.2.0-rc.2** |
-| pi-ai used by DSH | **0.87.1**, supplied by the host |
+| Plugin | **0.1.4** |
+| DeepSeek Harness | 0.2.1 prereleases from **0.2.1-rc.3**, and the 0.2.1 stable release; **0.2.0-rc.2** retained |
+| pi-ai used by DSH | **1.1.x** or **0.87.1**, supplied by the host |
 | Verified desktop platform | macOS; other platforms have not been verified |
 | ChatGPT account | Eligible for OpenAI's current plan integration, with permission granted to use the plan |
+
+This update was tested with DSH **0.2.1-rc.3** and pi-ai **1.1.0**. Later versions within the declared ranges are allowed to load but have not been tested. Previously supported DSH **0.2.0-rc.2** / pi-ai **0.87.1** is retained and was not dynamically retested for this update.
 
 Models and limits depend on what OpenAI returns for your account. “ChatGPT Pro Plan” on the icon is illustration text: it does not mean the plugin is Pro-only or includes unlimited usage. Recheck compatibility after upgrading DSH.
 
@@ -24,13 +26,13 @@ For details on the host's pi-ai dependency, the implementations this plugin reus
 
 ## Install
 
-Download **`dsh-chatgpt-plan-0.1.3.tgz`** from the [v0.1.3 release](https://github.com/WillQvQ/dsh-chatgpt-plan/releases/tag/v0.1.3). Use this plugin package; GitHub's automatically generated Source code archives are for browsing the source.
+The plugin version on this branch is **0.1.4**. Use **`dsh-chatgpt-plan-0.1.4.tgz`**. If [Releases](https://github.com/WillQvQ/dsh-chatgpt-plan/releases) does not yet provide this version, follow [Build from source and develop](#build-from-source-and-develop) below using a checkout that contains this fix. GitHub's automatically generated Source code archives are for browsing the source and cannot be installed directly as plugin packages.
 
 Quit DSH completely. On macOS, run this in Terminal, assuming the file is in Downloads and the App is in `/Applications`:
 
 ```sh
 "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
-  plugin --profile desktop add "$HOME/Downloads/dsh-chatgpt-plan-0.1.3.tgz"
+  plugin --profile desktop add "$HOME/Downloads/dsh-chatgpt-plan-0.1.4.tgz"
 ```
 
 DSH resolves runtime dependencies, including `undici`, during installation, so access to the package registry is required. Do not replace individual source files. Reopen DSH and confirm `dsh-chatgpt-plan` is enabled in the plugin list.
@@ -81,15 +83,29 @@ Signing out attempts to revoke the registration's renewable session, then remove
 
 | Symptom | What to check |
 | --- | --- |
+| DSH 0.2.1-rc.3 reports an incompatible plugin | Upgrade to **0.1.4**, then quit and reopen DSH; see the compatibility explanation below |
 | No plugin settings | Confirm installation in the active DSH profile and that the plugin is enabled, then quit and reopen DSH |
 | Signed in, but no models | Confirm plan permission, refresh models, and check eligibility and network settings |
 | Browser sign-in works, but the plugin cannot connect | Check browser and plugin network settings separately |
-| Sign-in page reports `Invalid Origin` | Upgrade to **0.1.3**, restart DSH, and reopen the account management page; see below |
+| Sign-in page reports `Invalid Origin` | Upgrade to **0.1.4**, restart DSH, and reopen the account management page; see below |
 | Model unavailable after switching accounts | Select a model actually returned for the new account |
 | Authorization expired | Sign in again; do not copy another app's token files |
 | Credential permission error | Check current-user ownership, owner-only permissions, and that the file is not a symlink; never attach account files to an issue |
-| Resuming a goal reports `objective and max_goal_rounds are valid only with action edit` | Upgrade to **0.1.3** and restart DSH; see below |
+| Resuming a goal reports `objective and max_goal_rounds are valid only with action edit` | Upgrade to **0.1.4** and restart DSH; see below |
 | `stale goal ref` or `the model cannot resume a paused goal` | Check the goal revision and paused state as described below |
+
+### Incompatible plugin on DSH 0.2.1-rc.3 (fixed in 0.1.4)
+
+Version 0.1.3 pins `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-llm-pi-ai` to exactly `0.2.0-rc.2` in `peerDependencies`. DSH 0.2.1-rc.3 ships both packages at `0.2.1-rc.3`, so its compatibility check disables the older plugin. The host's `@earendil-works/pi-ai` has also moved from `0.87.1` to `1.1.0` and needs an updated declaration, but it does not participate in that DSH compatibility check.
+
+Version 0.1.4 uses bounded ranges so each compatible update does not need its own exact version entry:
+
+- Both DSH peers use `0.2.0-rc.2 || >=0.2.1-rc.3 <0.2.2-0`: retain the original version and allow 0.2.1 prereleases from rc.3 through the 0.2.1 stable release. Prerelease and stable versions of 0.2.2 or later are excluded.
+- The pi-ai peer uses `0.87.1 || ~1.1.0`: retain the original version and allow 1.1.x patch releases. Version 1.2 and later are excluded.
+
+Only DSH 0.2.1-rc.3 / pi-ai 1.1.0 was tested for this update. Later versions within the ranges are permitted but untested, and the older combination was not dynamically retested. Validation covers the host's native compatibility check, plugin initialization with a temporary profile and a mocked adapter registry, and adapter requests with mocked network responses. This is not a complete desktop end-to-end test; live account authorization and plan inference were not repeated.
+
+Quit DSH completely, install the 0.1.4 `.tgz`, then reopen DSH. There is no need to modify host dependencies or account files.
 
 <a id="sign-in-invalid-origin"></a>
 
@@ -99,7 +115,7 @@ The previous management page's `no-referrer` policy made browser login forms sen
 
 ### Images and error recovery (fixed in 0.1.2)
 
-If reading an image leads to `Attachment reference is invalid.`, or the turn fails with `Cannot read properties of undefined (reading 'includes')`, upgrade to **0.1.3**, quit and reopen DSH, then retry in the original conversation.
+If reading an image leads to `Attachment reference is invalid.`, or the turn fails with `Cannot read properties of undefined (reading 'includes')`, upgrade to **0.1.4**, quit and reopen DSH, then retry in the original conversation.
 
 Earlier versions passed the path mapper and attachment reference to DSH's image-access helper in the wrong order, causing image-bearing requests to fail during local request construction. The plugin also supplied an incomplete retry policy, so error recovery threw a second exception that hid the original failure. Version 0.1.2 corrects the argument order and uses DSH's policy resolver to populate retry codes and backoff settings.
 
@@ -115,7 +131,7 @@ Goal recovery also follows DSH's own state and permission rules:
 - **`the model cannot resume a paused goal`**: the user must click Resume in the goal interface or send **`/goal resume` by itself** in the original conversation. An ordinary chat message such as “continue” does not replace this command.
 - **An `active` goal does not continue automatically after a restart**: it may be `disarmed`; use `/goal resume` to re-enable continuation. `max_goal_rounds` limits automatic continuation rounds, each of which can contain multiple tool calls.
 
-These rules come from the [goal tools](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/goal/tool-goal/README.md) and [user commands](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/goal/command-goal/README.md) in the verified DSH 0.2.0-rc.2 source. The plugin preserves these state and permission checks.
+These rules come from the [goal tools](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/goal/tool-goal/README.md) and [user commands](https://github.com/deepseek-ai/deepseek-harness/blob/639ed015397290b3745d163aafe02ffee4aa3f84/packages/goal/command-goal/README.md) in the previously reviewed DSH 0.2.0-rc.2 source. The plugin preserves these state and permission checks.
 
 ## Data and authorization
 
@@ -142,7 +158,7 @@ Uninstalling does not itself disconnect the app at OpenAI. Follow the sign-out i
 
 ## Relationship with DSH and pi-ai
 
-**You do not need to install the Pi app separately.** This plugin reuses `@deepseek-ai/dsh-llm-pi-ai` and `@earendil-works/pi-ai` supplied by the DSH host. The verified combination is DSH **0.2.0-rc.2** with pi-ai **0.87.1**; these versions are also declared in this project's [peerDependencies](package.json).
+**You do not need to install the Pi app separately.** This plugin reuses `@deepseek-ai/dsh-llm-pi-ai` and `@earendil-works/pi-ai` supplied by the DSH host. This update was tested with DSH **0.2.1-rc.3** and pi-ai **1.1.0**. The [peerDependencies](package.json) allow later 0.2.1 release candidates, the 0.2.1 stable release, and pi-ai 1.1.x patches, while retaining the previously supported DSH **0.2.0-rc.2** / pi-ai **0.87.1** combination. See the compatibility explanation above for the distinction between allowed and tested versions.
 
 ### Where DSH depends on pi-ai
 
@@ -185,18 +201,20 @@ npm test
 npm pack --ignore-scripts
 ```
 
-`npm test` uses Node's built-in runner and mocked responses. It needs no real account, internet connection, or installed DSH host dependencies. `npm pack` creates `dsh-chatgpt-plan-0.1.3.tgz`; install it as described above. DSH resolves dependencies for actual runtime use during installation.
+`npm test` uses Node's built-in runner and mocked responses. It needs no real account, internet connection, or installed DSH host dependencies. `npm pack` creates `dsh-chatgpt-plan-0.1.4.tgz`; install it as described above. DSH resolves dependencies for actual runtime use during installation.
 
-Tests cover account isolation, PKCE and identity validation, cancellation on switching, renewal and backoff, 401 retry, revocation, storage permissions, profile isolation, port conflicts, network settings, and management-page access control. On macOS with the compatible DSH version installed, also run the native adapter simulation:
+Tests cover account isolation, PKCE and identity validation, cancellation on switching, renewal and backoff, 401 retry, revocation, storage permissions, profile isolation, port conflicts, network settings, and management-page access control. On macOS with the compatible DSH version installed, also run the native compatibility check and adapter simulations:
 
 ```sh
+ELECTRON_RUN_AS_NODE=1 "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness" \
+  scripts/compatibility-test.mjs
 ELECTRON_RUN_AS_NODE=1 "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness" \
   scripts/wire-test.mjs
 ELECTRON_RUN_AS_NODE=1 "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness" \
   scripts/image-wire-test.mjs
 ```
 
-Both tests mock the network. The image test uses DSH's native attachment store, model adapter, and retry executor to cover user images, tool screenshots, invalid attachments, preservation of original errors, and the two-retry limit. The other test checks that requests emitted through DSH and pi-ai explicitly include `strict: false` and retain optional tool parameters, including after account switching and a 401 refresh retry. Passing simulations does not establish eligibility for every real account; actual use requires the account owner's authorization.
+`compatibility-test.mjs` uses the host's native dependency check and verifies plugin initialization with a temporary profile and a mocked adapter registry; it does not start the full DSH desktop environment. `wire-test.mjs` and `image-wire-test.mjs` mock the network. The image test uses DSH's native attachment store, model adapter, and retry executor to cover user images, tool screenshots, invalid attachments, preservation of original errors, and the two-retry limit. The other test checks that requests emitted through DSH and pi-ai explicitly include `strict: false` and retain optional tool parameters, including after account switching and a 401 refresh retry. Passing simulations does not establish eligibility for every real account; actual use requires the account owner's authorization.
 
 The browser sign-in regression requires Playwright to be importable from the current Node environment and a corresponding browser to be installed. For example, with Microsoft Edge installed:
 

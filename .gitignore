@@ -20,6 +20,7 @@
 !/scripts/
 /scripts/*
 !/scripts/runtime.mjs
+!/scripts/compatibility-test.mjs
 !/scripts/wire-test.mjs
 !/scripts/image-wire-test.mjs
 !/scripts/management-browser-test.mjs
