@@ -84,6 +84,7 @@ Signing out attempts to revoke the registration's renewable session, then remove
 | Symptom | What to check |
 | --- | --- |
 | DSH 0.2.1-rc.3 reports an incompatible plugin | Upgrade to **0.1.4**, then quit and reopen DSH; see the compatibility explanation below |
+| Continue with ChatGPT in Settings does nothing | Install a build containing the live management-address fix and restart DSH; Settings retries automatically and disables the button while the service is unavailable |
 | No plugin settings | Confirm installation in the active DSH profile and that the plugin is enabled, then quit and reopen DSH |
 | Signed in, but no models | Confirm plan permission, refresh models, and check eligibility and network settings |
 | Browser sign-in works, but the plugin cannot connect | Check browser and plugin network settings separately |
@@ -106,6 +107,8 @@ Version 0.1.4 uses bounded ranges so each compatible update does not need its ow
 Only DSH 0.2.1-rc.3 / pi-ai 1.1.0 was tested for this update. Later versions within the ranges are permitted but untested, and the older combination was not dynamically retested. Validation covers the host's native compatibility check, plugin initialization with a temporary profile and a mocked adapter registry, and adapter requests with mocked network responses. This is not a complete desktop end-to-end test; live account authorization and plan inference were not repeated.
 
 Quit DSH completely, install the 0.1.4 `.tgz`, then reopen DSH. There is no need to modify host dependencies or account files.
+
+Desktop caches page configuration at startup, so a plugin activated or reloaded later may lack a usable management address. Settings now retrieves the current address through DSH's authenticated same-origin endpoint on every status refresh, including when the management port changes. The old startup injection is retained only as a fallback when the endpoint does not exist. Until an address is available, Settings shows an explicit waiting state instead of a Continue with ChatGPT link without a destination.
 
 <a id="sign-in-invalid-origin"></a>
 

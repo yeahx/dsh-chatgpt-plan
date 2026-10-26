@@ -66,7 +66,7 @@ const profile = await mkdtemp(join(tmpdir(), 'dsh-compatibility-test-'));
 const originalFetch = globalThis.fetch;
 globalThis.fetch = () => { throw new Error('Unexpected network access during plugin initialization'); };
 const listeners = new Map();
-let registered, disposed = false;
+let registered, configRoute, disposed = false;
 try {
   const plugin = await import(pathToFileURL(join(packageRoot, manifest.main)).href);
   assert.equal(plugin.name, 'chatgpt-plan');
@@ -75,6 +75,10 @@ try {
     // Never use a profile named desktop: that would attempt legacy account migration.
     baseUrl: pathToFileURL(profile).href,
     on(name, listener) { listeners.set(name, [...(listeners.get(name) || []), listener]); },
+    inject(names, apply) {
+      assert.deepEqual(names, ['connection']);
+      apply({ connection: { fetch: { register(route) { configRoute = route; } } } });
+    },
     get() { return undefined; },
     llm: { registerAdapter(providers, adapter) {
       assert.deepEqual(providers, ['chatgpt-plan']);
@@ -90,6 +94,12 @@ try {
   for (const listener of listeners.get('webserver/index-inject') || []) listener(injected);
   assert.equal(injected[0]?.name, '__DSH_CHATGPT_PLAN__');
   assert.equal(new URL(injected[0].value.origin).hostname, '127.0.0.1');
+  assert.equal(configRoute.path, '/api/chatgpt-plan-config');
+  assert.deepEqual(configRoute.methods, ['GET']);
+  assert.equal(configRoute.requestBody, 'buffered');
+  const response = await configRoute.fetch(new Request('http://localhost/api/chatgpt-plan-config'));
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await response.json(), injected[0].value);
   const accounts = JSON.parse(await readFile(join(profile, 'data/dsh-chatgpt-plan/accounts.json'), 'utf8'));
   assert.deepEqual(accounts.profiles, []);
 } finally {

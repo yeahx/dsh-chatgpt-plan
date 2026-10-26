@@ -23,6 +23,14 @@ export async function apply(ctx) {
   const disposeAdapter = ctx.llm.registerAdapter([PROVIDER], adapter);
   // Model-picker clients refresh on the same event as native provider updates.
   auth.onChange = () => disposeAdapter.replace([PROVIDER]);
+  // Desktop caches index injections at boot. A plugin activated or reloaded
+  // later must also expose its current address through the authenticated host.
+  ctx.inject(['connection'], connected => connected.connection.fetch.register({
+    path: '/api/chatgpt-plan-config', methods: ['GET'], requestBody: 'buffered',
+    fetch: async () => Response.json({ origin: management.origin, csrf: management.csrf }, {
+      headers: { 'cache-control': 'no-store' },
+    }),
+  }));
   ctx.on('webserver/index-inject', table => table.push({ kind: 'global', name: '__DSH_CHATGPT_PLAN__', value: { origin: management.origin, csrf: management.csrf } }));
   ctx.on('dispose', () => disposeAdapter?.());
 }

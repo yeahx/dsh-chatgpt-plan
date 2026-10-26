@@ -27,3 +27,4 @@
 !/test/
 /test/*
 !/test/integration.test.mjs
+!/test/client.test.mjs

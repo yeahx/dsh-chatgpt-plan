@@ -1,15 +1,37 @@
 window.__ModuleLoader__.load({ id: 'dsh-chatgpt-plan', factory: require => {
   const React = require('react'), h = React.createElement;
   function Panel() {
-    const config = globalThis.__DSH_CHATGPT_PLAN__;
+    const [config, setConfig] = React.useState(null);
     const [state, setState] = React.useState(null), [error, setError] = React.useState('');
     React.useEffect(() => {
-      let active = true;
-      const refresh = async () => { try {
-        const res = await fetch(config.origin + '/api/status', { headers: { 'X-DSH-CSRF': config.csrf } });
-        if (!res.ok) throw Error('无法读取登录状态');
-        const data = await res.json(); if (active) { setState(data); setError(''); }
-      } catch { if (active) setError('请打开账号管理页查看登录状态。'); } };
+      let active = true, refreshing = false;
+      const refresh = async () => {
+        if (refreshing) return;
+        refreshing = true;
+        try {
+          let currentConfig;
+          try {
+            // Fetch every time: Desktop's boot global can be absent or stale
+            // after plugin activation/reload, including a change of local port.
+            const response = await fetch('/api/chatgpt-plan-config', { cache: 'no-store' });
+            if (response.ok) currentConfig = await response.json();
+            else if (response.status === 404) currentConfig = globalThis.__DSH_CHATGPT_PLAN__;
+            if (!currentConfig || typeof currentConfig.origin !== 'string' || typeof currentConfig.csrf !== 'string' || !currentConfig.csrf) throw Error();
+            const url = new URL(currentConfig.origin);
+            if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.origin !== currentConfig.origin) throw Error();
+          } catch {
+            if (active) { setConfig(null); setState(null); setError('账号管理服务暂未就绪，正在自动重试。'); }
+            return;
+          }
+          if (!active) return;
+          setConfig(currentConfig);
+          try {
+            const res = await fetch(currentConfig.origin + '/api/status', { headers: { 'X-DSH-CSRF': currentConfig.csrf } });
+            if (!res.ok) throw Error('无法读取登录状态');
+            const data = await res.json(); if (active) { setState(data); setError(''); }
+          } catch { if (active) { setState(null); setError('无法读取登录状态，可打开账号管理页继续。'); } }
+        } finally { refreshing = false; }
+      };
       refresh(); const timer = setInterval(refresh, 5000);
       return () => { active = false; clearInterval(timer); };
     }, []);
@@ -23,7 +45,9 @@ window.__ModuleLoader__.load({ id: 'dsh-chatgpt-plan', factory: require => {
       current && h('p', { style: { fontSize: 12, opacity: .7 } }, '应用注册：' + current.clientId),
       error && h('p', null, error),
       state?.notice && h('p', null, state.notice),
-      h('a', { href: config?.origin, target: '_blank', rel: 'noreferrer', style: linkStyle }, current?.connected ? '添加 / 切换账号与网络设置' : 'Continue with ChatGPT'),
+      config
+        ? h('a', { href: config.origin, target: '_blank', rel: 'noreferrer', style: linkStyle }, current?.connected ? '添加 / 切换账号与网络设置' : 'Continue with ChatGPT')
+        : h('button', { disabled: true, style: linkStyle }, '正在连接账号管理服务…'),
       h('a', { href: 'https://chatgpt.com/settings/usage', target: '_blank', rel: 'noreferrer', style: linkStyle }, '管理用量与额度'),
       h('p', { style: { fontSize: 12, opacity: .7 } }, '在账号管理页完成浏览器授权后，回到会话模型菜单选择“ChatGPT 套餐（独立授权）”。')
     );
