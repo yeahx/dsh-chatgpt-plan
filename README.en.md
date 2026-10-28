@@ -12,7 +12,7 @@ This is an unofficial local plugin with MIT-licensed source code. Each user auth
 
 | Component | Version / requirement |
 | --- | --- |
-| Plugin | **0.1.5-daybreak** |
+| Plugin | **0.1.6-daybreak** |
 | DeepSeek Harness | 0.2.1 prereleases from **0.2.1-rc.3**, and the 0.2.1 stable release; **0.2.0-rc.2** retained |
 | pi-ai used by DSH | **1.1.x** or **0.87.1**, supplied by the host |
 | Verified desktop platform | macOS; other platforms have not been verified |
@@ -26,13 +26,13 @@ For details on the host's pi-ai dependency, the implementations this plugin reus
 
 ## Install
 
-The current version is **0.1.5-daybreak**, including Desktop compatibility fixes and experimental Fast / Daybreak settings. Download **`dsh-chatgpt-plan-0.1.5-daybreak.tgz`** from the [GitHub Release](https://github.com/yeahx/dsh-chatgpt-plan/releases/tag/v0.1.5-daybreak), or follow [Build from source and develop](#build-from-source-and-develop) below. GitHub's automatically generated Source code archives cannot be installed directly as plugin packages.
+The current version is **0.1.6-daybreak**, including per-account host IDs, login concurrency fixes, Desktop compatibility fixes, and experimental Fast / Daybreak settings. Download **`dsh-chatgpt-plan-0.1.6-daybreak.tgz`** from the [GitHub Release](https://github.com/yeahx/dsh-chatgpt-plan/releases/tag/v0.1.6-daybreak), or follow [Build from source and develop](#build-from-source-and-develop) below. GitHub's automatically generated Source code archives cannot be installed directly as plugin packages.
 
-Quit DSH completely. On macOS, run this in Terminal, assuming the file is in Downloads and the App is in `/Applications`:
+Quit DSH completely and back up `data/dsh-chatgpt-plan/` under the active DSH profile. This version migrates account storage; older plugins cannot directly read the migrated files. On macOS, run this in Terminal, assuming the file is in Downloads and the App is in `/Applications`:
 
 ```sh
 "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
-  plugin --profile desktop add "$HOME/Downloads/dsh-chatgpt-plan-0.1.5-daybreak.tgz"
+  plugin --profile desktop add "$HOME/Downloads/dsh-chatgpt-plan-0.1.6-daybreak.tgz"
 ```
 
 DSH resolves runtime dependencies, including `undici`, during installation, so access to the package registry is required. Do not replace individual source files. Reopen DSH and confirm `dsh-chatgpt-plan` is enabled in the plugin list.
@@ -59,17 +59,17 @@ Switching cancels the previous account's in-progress requests and refreshes the 
 
 Switching does not clear DSH conversation history. Start a new conversation to separate chat content.
 
-### Per-account-configuration host IDs (branch preview)
+### Per-account-configuration host IDs (since 0.1.6-daybreak)
 
-The `codex/per-account-host-id` branch treats each local account configuration as a separate logical host. It generates and persists an independent random `urn:uuid:…` and sends it as `ext_agent_host_id` during authorization. Reauthorization, sign-out, account switching, and restarts reuse that configuration's ID; it is never rotated per request. New registrations persist their identifier before opening the authorization page, including when registrations run concurrently.
+Since **0.1.6-daybreak**, each local account configuration is treated as a separate logical host. It generates and persists an independent random `urn:uuid:…` and sends it as `ext_agent_host_id` during authorization. Reauthorization, sign-out, account switching, and restarts reuse that configuration's ID; it is never rotated per request. New registrations persist their identifier before opening the authorization page, including when registrations run concurrently.
 
 On first load, legacy storage is upgraded to format 2. Each account without its own identifier receives one, while credentials, models, labels, and Fast / Daybreak choices are preserved. Existing tokens are not reissued automatically: the new identifier is sent on the account's next reauthorization and cannot undo past associations. Older plugins cannot directly read format 2; retain a backup of the old configuration before upgrading rather than opening migrated storage with an older plugin.
 
-This change is not in the published `v0.1.5-daybreak` package. It changes the plugin's definition of a host boundary. [OpenAI's documentation](https://developers.openai.com/siwc/token-sharing-open-source) defines a host ID as an identifier for a runtime whose lifecycle the app determines, requiring stability within that lifecycle. Live server compatibility during reauthorization has not been verified for this branch, and separate host IDs do not guarantee that accounts cannot be associated.
+This change is merged into `main` and included in this release. It changes the plugin's definition of a host boundary. [OpenAI's documentation](https://developers.openai.com/siwc/token-sharing-open-source) defines a host ID as an identifier for a runtime whose lifecycle the app determines, requiring stability within that lifecycle. Live server compatibility during reauthorization has not been verified for this release, and separate host IDs do not guarantee that accounts cannot be associated.
 
 ## Fast / Daybreak inference settings (experimental)
 
-These controls ship in the **0.1.5-daybreak** prerelease and are merged into this repository's `main`. Earlier 0.1.4 packages do not contain them.
+These controls were introduced in **0.1.5-daybreak**, are included in the current version, and are merged into this repository's `main`. Earlier 0.1.4 packages do not contain them.
 
 Open **管理账号、网络与推理设置** (“Manage accounts, network, and inference”) from DSH Settings. In the account card's **推理设置（实验性）** (“Inference settings — experimental”), choose the speed and Daybreak mode, then click **保存推理设置** (“Save inference settings”). Each account keeps its own choices. Changes apply to that account's subsequent requests and do not interrupt an active response stream.
 
@@ -111,16 +111,16 @@ Signing out attempts to revoke the registration's renewable session, then remove
 
 | Symptom | What to check |
 | --- | --- |
-| DSH 0.2.1-rc.3 reports an incompatible plugin | Upgrade to **0.1.5-daybreak**, then quit and reopen DSH; see the compatibility explanation below |
+| DSH 0.2.1-rc.3 reports an incompatible plugin | Upgrade to **0.1.6-daybreak**, then quit and reopen DSH; see the compatibility explanation below |
 | Continue with ChatGPT in Settings does nothing | Install a build containing the live management-address fix and restart DSH; Settings retries automatically and disables the button while the service is unavailable |
 | No plugin settings | Confirm installation in the active DSH profile and that the plugin is enabled, then quit and reopen DSH |
 | Signed in, but no models | Confirm plan permission, refresh models, and check eligibility and network settings |
 | Browser sign-in works, but the plugin cannot connect | Check browser and plugin network settings separately |
-| Sign-in page reports `Invalid Origin` | Upgrade to **0.1.5-daybreak**, restart DSH, and reopen the account management page; see below |
+| Sign-in page reports `Invalid Origin` | Upgrade to **0.1.6-daybreak**, restart DSH, and reopen the account management page; see below |
 | Model unavailable after switching accounts | Select a model actually returned for the new account |
 | Authorization expired | Sign in again; do not copy another app's token files |
 | Credential permission error | Check current-user ownership, owner-only permissions, and that the file is not a symlink; never attach account files to an issue |
-| Resuming a goal reports `objective and max_goal_rounds are valid only with action edit` | Upgrade to **0.1.5-daybreak** and restart DSH; see below |
+| Resuming a goal reports `objective and max_goal_rounds are valid only with action edit` | Upgrade to **0.1.6-daybreak** and restart DSH; see below |
 | `stale goal ref` or `the model cannot resume a paused goal` | Check the goal revision and paused state as described below |
 
 ### Incompatible plugin on DSH 0.2.1-rc.3 (fixed in 0.1.4)
@@ -134,7 +134,7 @@ Version 0.1.4 uses bounded ranges so each compatible update does not need its ow
 
 Only DSH 0.2.1-rc.3 / pi-ai 1.1.0 was tested for this update. Later versions within the ranges are permitted but untested, and the older combination was not dynamically retested. Validation covers the host's native compatibility check, plugin initialization with a temporary profile and a mocked adapter registry, and adapter requests with mocked network responses. This is not a complete desktop end-to-end test; live account authorization and plan inference were not repeated.
 
-Quit DSH completely, install the 0.1.5-daybreak `.tgz`, then reopen DSH. There is no need to modify host dependencies or account files.
+Quit DSH completely, install the 0.1.6-daybreak `.tgz`, then reopen DSH. There is no need to modify host dependencies or account files.
 
 Desktop caches page configuration at startup, so a plugin activated or reloaded later may lack a usable management address. Settings now retrieves the current address through DSH's authenticated same-origin endpoint on every status refresh, including when the management port changes. The old startup injection is retained only as a fallback when the endpoint does not exist. Until an address is available, Settings shows an explicit waiting state instead of a Continue with ChatGPT link without a destination.
 
@@ -146,7 +146,7 @@ The previous management page's `no-referrer` policy made browser login forms sen
 
 ### Images and error recovery (fixed in 0.1.2)
 
-If reading an image leads to `Attachment reference is invalid.`, or the turn fails with `Cannot read properties of undefined (reading 'includes')`, upgrade to **0.1.5-daybreak**, quit and reopen DSH, then retry in the original conversation.
+If reading an image leads to `Attachment reference is invalid.`, or the turn fails with `Cannot read properties of undefined (reading 'includes')`, upgrade to **0.1.6-daybreak**, quit and reopen DSH, then retry in the original conversation.
 
 Earlier versions passed the path mapper and attachment reference to DSH's image-access helper in the wrong order, causing image-bearing requests to fail during local request construction. The plugin also supplied an incomplete retry policy, so error recovery threw a second exception that hid the original failure. Version 0.1.2 corrects the argument order and uses DSH's policy resolver to populate retry codes and backoff settings.
 
@@ -226,13 +226,13 @@ See the [DSH community discussion](https://github.com/deepseek-ai/deepseek-harne
 Use Node.js 22 or later; this release was validated with Node.js 24. There is no compilation step:
 
 ```sh
-git clone --branch v0.1.5-daybreak https://github.com/yeahx/dsh-chatgpt-plan.git
+git clone --branch v0.1.6-daybreak https://github.com/yeahx/dsh-chatgpt-plan.git
 cd dsh-chatgpt-plan
 npm test
 npm pack --ignore-scripts
 ```
 
-`npm test` uses Node's built-in runner and mocked responses. It needs no real account, internet connection, or installed DSH host dependencies. `npm pack` creates `dsh-chatgpt-plan-0.1.5-daybreak.tgz`; install it as described above. DSH resolves dependencies for actual runtime use during installation.
+`npm test` uses Node's built-in runner and mocked responses. It needs no real account, internet connection, or installed DSH host dependencies. `npm pack` creates `dsh-chatgpt-plan-0.1.6-daybreak.tgz`; install it as described above. DSH resolves dependencies for actual runtime use during installation.
 
 Tests cover account isolation, PKCE and identity validation, cancellation on switching, renewal and backoff, 401 retry, revocation, storage permissions, profile isolation, port conflicts, network settings, and management-page access control. On macOS with the compatible DSH version installed, also run the native compatibility check and adapter simulations:
 
