@@ -12,7 +12,7 @@
 
 | 项目 | 版本 / 要求 |
 | --- | --- |
-| 插件 | **0.1.4** |
+| 插件 | **0.1.5-daybreak** |
 | DeepSeek Harness | **0.2.1-rc.3** 起的 0.2.1 预发布版及正式版；保留 **0.2.0-rc.2** 支持 |
 | DSH 使用的 pi-ai | **1.1.x** 或 **0.87.1**，由宿主提供 |
 | 已验证的桌面环境 | macOS；其他平台尚未验证 |
@@ -26,13 +26,13 @@
 
 ## 安装
 
-本功能分支的插件版本仍为 **0.1.4**，尚未发布 Release。请按下方[从源码打包与开发](#从源码打包与开发)构建 **`dsh-chatgpt-plan-0.1.4.tgz`**；历史同版本安装包不包含本分支的 Fast / Daybreak 选项。GitHub 自动生成的 Source code 压缩包用于查看源码，不能直接当作插件包安装。
+当前版本为 **0.1.5-daybreak**，包含 Desktop 兼容性修复与实验性 Fast / Daybreak 设置。请从 [GitHub Release](https://github.com/yeahx/dsh-chatgpt-plan/releases/tag/v0.1.5-daybreak) 下载 **`dsh-chatgpt-plan-0.1.5-daybreak.tgz`**，或按下方[从源码打包与开发](#从源码打包与开发)构建。GitHub 自动生成的 Source code 压缩包不能直接当作插件包安装。
 
 先完全退出 DSH。在 macOS 终端执行以下命令（假设文件保存在下载目录，App 安装在 `/Applications`）：
 
 ```sh
 "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
-  plugin --profile desktop add "$HOME/Downloads/dsh-chatgpt-plan-0.1.4.tgz"
+  plugin --profile desktop add "$HOME/Downloads/dsh-chatgpt-plan-0.1.5-daybreak.tgz"
 ```
 
 安装过程会解析 `undici` 等运行时依赖，需要能够访问包仓库。不要仅复制单个源码文件。安装完成后重新打开 DSH，确认插件列表中的 `dsh-chatgpt-plan` 已启用。
@@ -61,7 +61,7 @@
 
 ## Fast / Daybreak 推理设置（实验性）
 
-此功能是 [fork 分支 `codex/fast-daybreak-controls`](https://github.com/yeahx/dsh-chatgpt-plan/tree/codex/fast-daybreak-controls) 的预览，包版本仍为 **0.1.4**，尚未发布为 Release。需要从该分支按下方源码打包说明构建；已有的同版本安装包不一定包含这些选项。
+这些选项随 **0.1.5-daybreak** 预发布版本提供，已合入本仓库的 `main`。此前的 0.1.4 安装包不包含这些选项。
 
 从 DSH 设置打开 **管理账号、网络与推理设置**，在对应账号卡片的 **推理设置（实验性）** 中选择速度和 Daybreak 模式，再点击 **保存推理设置**。选项按账号独立保存，用于该账号后续请求，不会中断正在返回的回复。
 
@@ -103,16 +103,16 @@
 
 | 现象 | 处理方法 |
 | --- | --- |
-| DSH 0.2.1-rc.3 提示插件不兼容 | 升级到 **0.1.4**，完全退出并重新打开 DSH；详见下方兼容性说明 |
+| DSH 0.2.1-rc.3 提示插件不兼容 | 升级到 **0.1.5-daybreak**，完全退出并重新打开 DSH；详见下方兼容性说明 |
 | 设置里的 Continue with ChatGPT 没有反应 | 安装包含实时管理地址修复的版本并重启 DSH；设置页会自动重试连接，服务未就绪时会显示禁用按钮 |
 | 设置中没有插件入口 | 确认安装到正在使用的 DSH 配置、插件已启用，再完全退出并重新打开 DSH |
 | 登录成功但没有模型 | 确认已允许套餐使用，刷新模型列表，并检查账号资格及网络 |
 | 浏览器能授权，插件连接失败 | 分别检查浏览器网络和插件网络设置 |
-| 登录页面提示 `Invalid Origin` | 升级到 **0.1.4**、重启 DSH，再重新打开账号管理页；详见下方说明 |
+| 登录页面提示 `Invalid Origin` | 升级到 **0.1.5-daybreak**、重启 DSH，再重新打开账号管理页；详见下方说明 |
 | 切换账号后模型不可用 | 重新选择新账号实际提供的模型 |
 | 提示授权失效 | 在账号页重新登录，不要复制其他应用的 token 文件 |
 | 提示凭据权限异常 | 检查文件属于当前用户、不是软链接，且只允许所有者读写；不要把账号文件发到 Issue |
-| 恢复目标时提示 `objective and max_goal_rounds are valid only with action edit` | 升级到 **0.1.4** 并重启 DSH；详见下方说明 |
+| 恢复目标时提示 `objective and max_goal_rounds are valid only with action edit` | 升级到 **0.1.5-daybreak** 并重启 DSH；详见下方说明 |
 | 提示 `stale goal ref` 或 `the model cannot resume a paused goal` | 按下方说明检查目标版本与暂停状态 |
 
 ### DSH 0.2.1-rc.3 提示插件不兼容（0.1.4 修复）
@@ -126,7 +126,7 @@
 
 本次实测组合仅为 DSH 0.2.1-rc.3 / pi-ai 1.1.0；范围内的后续版本只是允许加载，尚未实测，旧组合也未在本次重新进行动态测试。验证覆盖宿主原生兼容性检查、临时配置和模拟适配器注册表中的插件初始化，以及模拟网络下的适配器请求；不代表完整桌面端到端验证，本次未重新执行真实账号授权或套餐推理。
 
-升级时先完全退出 DSH，再安装 0.1.4 的 `.tgz` 并重启。无需修改宿主依赖或账号文件。
+升级时先完全退出 DSH，再安装 0.1.5-daybreak 的 `.tgz` 并重启。无需修改宿主依赖或账号文件。
 
 桌面端会缓存启动时的页面配置，之后才激活或重载的插件可能没有有效的管理页地址。设置页现在通过 DSH 已认证的同源接口实时获取地址，并在每次状态刷新时更新，兼容管理服务端口变化；旧的启动注入仅作为接口不存在时的兼容路径。未获得地址时显示明确的等待状态，避免出现没有链接目标的 Continue with ChatGPT。
 
@@ -138,7 +138,7 @@
 
 ### 图片与错误恢复（0.1.2 修复）
 
-如果读取图片后出现 `Attachment reference is invalid.`，或本轮运行失败显示 `Cannot read properties of undefined (reading 'includes')`，请升级到 **0.1.4** 并完全重启 DSH，再在原会话中重试。
+如果读取图片后出现 `Attachment reference is invalid.`，或本轮运行失败显示 `Cannot read properties of undefined (reading 'includes')`，请升级到 **0.1.5-daybreak** 并完全重启 DSH，再在原会话中重试。
 
 旧版本调用 DSH 图片附件函数时传反了路径映射与附件引用参数，导致带图片的模型请求在本地构造阶段失败；同时，插件提供的重试策略缺少错误码列表和退避参数，错误恢复又触发第二次异常，掩盖了原始原因。0.1.2 修正了参数顺序，并使用 DSH 的策略解析器补全重试配置。
 
@@ -218,13 +218,13 @@ Agent 循环、工具执行、文件权限、会话存储、插件系统和界�
 使用 Node.js 22 或更高版本（本次验证使用 Node.js 24）。没有编译步骤：
 
 ```sh
-git clone --branch codex/fast-daybreak-controls https://github.com/yeahx/dsh-chatgpt-plan.git
+git clone --branch v0.1.5-daybreak https://github.com/yeahx/dsh-chatgpt-plan.git
 cd dsh-chatgpt-plan
 npm test
 npm pack --ignore-scripts
 ```
 
-`npm test` 使用 Node 内置测试工具和模拟响应，不需要真实账号、互联网或已安装的 DSH 宿主依赖。`npm pack` 生成 `dsh-chatgpt-plan-0.1.4.tgz`，按前述命令安装；实际运行的依赖由 DSH 安装过程解析。
+`npm test` 使用 Node 内置测试工具和模拟响应，不需要真实账号、互联网或已安装的 DSH 宿主依赖。`npm pack` 生成 `dsh-chatgpt-plan-0.1.5-daybreak.tgz`，按前述命令安装；实际运行的依赖由 DSH 安装过程解析。
 
 测试覆盖账号隔离、PKCE / 身份校验、切换取消、续期退避、401 重试、撤销、存储权限、配置隔离、端口冲突、网络设置和管理页访问控制。在安装了兼容版本 DSH 的 macOS 上，还可运行原生兼容性检查与适配器模拟测试：
 
