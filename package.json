@@ -14,6 +14,7 @@
   "files": [
     "index.mjs",
     "adapter.mjs",
+    "inference-options.mjs",
     "oauth.mjs",
     "network.mjs",
     "storage.mjs",

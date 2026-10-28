@@ -26,7 +26,7 @@ For details on the host's pi-ai dependency, the implementations this plugin reus
 
 ## Install
 
-The plugin version on this branch is **0.1.4**. Use **`dsh-chatgpt-plan-0.1.4.tgz`**. If [Releases](https://github.com/WillQvQ/dsh-chatgpt-plan/releases) does not yet provide this version, follow [Build from source and develop](#build-from-source-and-develop) below using a checkout that contains this fix. GitHub's automatically generated Source code archives are for browsing the source and cannot be installed directly as plugin packages.
+This feature branch keeps plugin version **0.1.4** and has not been published as a Release. Follow [Build from source and develop](#build-from-source-and-develop) below to create **`dsh-chatgpt-plan-0.1.4.tgz`**; older packages with the same version do not contain this branch's Fast / Daybreak controls. GitHub's automatically generated Source code archives are for browsing the source and cannot be installed directly as plugin packages.
 
 Quit DSH completely. On macOS, run this in Terminal, assuming the file is in Downloads and the App is in `/Applications`:
 
@@ -58,6 +58,26 @@ Always open the account page from DSH Settings. It listens on loopback only, pre
 Switching cancels the previous account's in-progress requests and refreshes the model list. Registrations keep separate credentials and models, even when email addresses match. Only one account is active at a time. The plugin does not automatically rotate accounts, pool allowances, or fall back to another account after an error or sign-out.
 
 Switching does not clear DSH conversation history. Start a new conversation to separate chat content.
+
+## Fast / Daybreak inference settings (experimental)
+
+This feature is a preview on the [fork branch `codex/fast-daybreak-controls`](https://github.com/yeahx/dsh-chatgpt-plan/tree/codex/fast-daybreak-controls). The package version remains **0.1.4**, and this feature has not been published in a Release. Build from that branch using the source instructions below; an existing package with the same version may not contain these controls.
+
+Open **管理账号、网络与推理设置** (“Manage accounts, network, and inference”) from DSH Settings. In the account card's **推理设置（实验性）** (“Inference settings — experimental”), choose the speed and Daybreak mode, then click **保存推理设置** (“Save inference settings”). Each account keeps its own choices. Changes apply to that account's subsequent requests and do not interrupt an active response stream.
+
+| Choice | Request behavior |
+| --- | --- |
+| Speed: 默认（跟随服务端） — Default | Omit `service_tier` |
+| Speed: 标准 — Standard | `service_tier: "default"` |
+| Speed: Fast | `service_tier: "fast"` |
+| Daybreak: 默认（跟随服务端） — Default | Omit `access_programs` |
+| Daybreak: 关闭 — Off | `access_programs.cyber: "standard"` |
+| Daybreak: Daybreak Blue | `access_programs.cyber: "daybreak_blue"` |
+| Daybreak: Daybreak Red | `access_programs.cyber: "daybreak_red"` |
+
+Both choices start at Default, preserving existing request behavior. Fast may consume more allowance; OpenAI determines actual speed, usage, and availability. Both features require support for the account and selected model. A successful save confirms local persistence, not server acceptance. Selecting Daybreak grants no additional access. Blue / Red request values must match the model; the plugin does not infer them from account approval, change models, or silently retry at a lower tier when unsupported. Adjust the choices or restore Default if the service returns a relevant error.
+
+The fields follow the official [Fast mode](https://developers.openai.com/api/docs/guides/fast-mode) and [Daybreak](https://developers.openai.com/api/docs/guides/daybreak) documentation. Those API documents do not guarantee availability through this plugin's Sign in with ChatGPT (SIWC) OAuth plan access: **live SIWC Fast / Daybreak inference has not been verified for this feature**. The plugin does not switch to API-key billing, and [SIWC preview restrictions](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations) still apply.
 
 ## Network settings
 
@@ -198,7 +218,7 @@ See the [DSH community discussion](https://github.com/deepseek-ai/deepseek-harne
 Use Node.js 22 or later; this release was validated with Node.js 24. There is no compilation step:
 
 ```sh
-git clone https://github.com/WillQvQ/dsh-chatgpt-plan.git
+git clone --branch codex/fast-daybreak-controls https://github.com/yeahx/dsh-chatgpt-plan.git
 cd dsh-chatgpt-plan
 npm test
 npm pack --ignore-scripts
@@ -225,7 +245,7 @@ The browser sign-in regression requires Playwright to be importable from the cur
 PLAYWRIGHT_CHANNEL=msedge node scripts/management-browser-test.mjs
 ```
 
-If Playwright is elsewhere, set `PLAYWRIGHT_MODULE` to its module entry's absolute path or `file:` URL. This real-browser test covers adding an account, signing in again, authorizing plan usage, and suppressing referrers after callbacks. Authorization is mocked on loopback; it reads no real accounts and consumes no plan allowance.
+If Playwright is elsewhere, set `PLAYWRIGHT_MODULE` to its module entry's absolute path or `file:` URL. This real-browser test covers adding an account, signing in again, authorizing plan usage, and suppressing referrers after callbacks. It also uses temporary account storage to test saving inference choices, persistence after a server restart, isolation between two accounts, restoring defaults, and save failures. Authorization is mocked on loopback; it reads no real accounts and consumes no plan allowance.
 
 ## License and artwork
 
