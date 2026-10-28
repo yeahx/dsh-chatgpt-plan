@@ -59,6 +59,14 @@ Switching cancels the previous account's in-progress requests and refreshes the 
 
 Switching does not clear DSH conversation history. Start a new conversation to separate chat content.
 
+### Per-account-configuration host IDs (branch preview)
+
+The `codex/per-account-host-id` branch treats each local account configuration as a separate logical host. It generates and persists an independent random `urn:uuid:…` and sends it as `ext_agent_host_id` during authorization. Reauthorization, sign-out, account switching, and restarts reuse that configuration's ID; it is never rotated per request. New registrations persist their identifier before opening the authorization page, including when registrations run concurrently.
+
+On first load, legacy storage is upgraded to format 2. Each account without its own identifier receives one, while credentials, models, labels, and Fast / Daybreak choices are preserved. Existing tokens are not reissued automatically: the new identifier is sent on the account's next reauthorization and cannot undo past associations. Older plugins cannot directly read format 2; retain a backup of the old configuration before upgrading rather than opening migrated storage with an older plugin.
+
+This change is not in the published `v0.1.5-daybreak` package. It changes the plugin's definition of a host boundary. [OpenAI's documentation](https://developers.openai.com/siwc/token-sharing-open-source) defines a host ID as an identifier for a runtime whose lifecycle the app determines, requiring stability within that lifecycle. Live server compatibility during reauthorization has not been verified for this branch, and separate host IDs do not guarantee that accounts cannot be associated.
+
 ## Fast / Daybreak inference settings (experimental)
 
 These controls ship in the **0.1.5-daybreak** prerelease and are merged into this repository's `main`. Earlier 0.1.4 packages do not contain them.

@@ -50,7 +50,7 @@ async function fixture(t) {
   return { store, auth, calls, fetcher, begin, finish, setNow: value => now = value, setIdentity: value => identity = value, setModel: value => modelName = value, setScopes: value => scopes = value, setClient: value => currentId = value, setRefreshError: value => failRefresh = value, refreshes: () => refreshes };
 }
 
-test('independent registration uses PKCE, persistent host and issued client; owner-only credentials', async t => {
+test('independent registration uses PKCE, a persistent account host and issued client; owner-only credentials', async t => {
   const f = await fixture(t), url = await f.begin();
   assert.equal(url.searchParams.get('client_id'), 'dynamic_agent_client');
   assert.equal(url.searchParams.get('agent_name_hint'), 'DeepSeek Harness');
@@ -58,7 +58,9 @@ test('independent registration uses PKCE, persistent host and issued client; own
   assert.equal(url.searchParams.get('code_challenge'), createHash('sha256').update(f.auth.pending.verifier).digest('base64url'));
   await f.finish(url);
   const data = await f.store.load(), p = data.profiles[0];
-  assert.equal(data.hostId, host); assert.equal(p.clientId, 'oaiapp_test'); assert.equal(p.subject, 'account-one'); assert.equal(p.models.length, 1);
+  assert.equal(data.version, 2); assert.equal(data.hostId, undefined); assert.equal(p.hostId, host);
+  assert.deepEqual(data.hostRegistrations, {});
+  assert.equal(p.clientId, 'oaiapp_test'); assert.equal(p.subject, 'account-one'); assert.equal(p.models.length, 1);
   assert.equal((await stat(f.store.path)).mode & 0o777, 0o600);
   assert.equal((await stat(f.store.directory)).mode & 0o777, 0o700);
   const status = JSON.stringify(await f.auth.status()); assert.ok(!status.includes('private-access')); assert.ok(!status.includes('private-refresh')); assert.ok(!status.includes('id_token'));
@@ -93,10 +95,96 @@ test('multiple registrations stay separate and reauthorization rejects a differe
   const f = await fixture(t); await f.finish(await f.begin());
   const first = (await f.store.load()).profiles[0]; f.setClient('oaiapp_second'); await f.finish(await f.begin({ newProfile: true }));
   const state = await f.store.load(); assert.equal(state.profiles.length, 2); assert.notEqual(state.activeProfileId, first.id);
+  assert.notEqual(state.profiles[1].hostId, first.hostId);
   await f.auth.select(first.id); assert.equal((await f.store.load()).activeProfileId, first.id);
   f.setClient(first.clientId); const url = await f.begin();
   const original = f.auth.identity.bind(f.auth); f.auth.identity = async (...args) => ({ ...await original(...args), subject: 'different-user' });
   await assert.rejects(f.finish(url), /账号与已保存/); assert.equal((await f.store.load()).profiles[0].subject, 'account-one');
+});
+test('account host IDs survive restart, sign-out and switching without sharing another registration host', async t => {
+  const f = await fixture(t); await f.finish(await f.begin());
+  const first = (await f.store.load()).profiles[0];
+  f.setClient('oaiapp_second'); await f.finish(await f.begin({ newProfile: true }));
+  const second = (await f.store.load()).profiles[1];
+  assert.notEqual(first.hostId, second.hostId);
+  await f.auth.select(first.id);
+  assert.equal(new URL(await f.auth.begin({ redirectUri: 'http://127.0.0.1:18762/auth/callback' })).searchParams.get('ext_agent_host_id'), first.hostId);
+  f.auth.cancel();
+  await f.auth.signOut(first.id);
+  const reloaded = new ChatGPTAuth({ store: new Store(f.store.directory), fetcher: f.fetcher, now: () => NOW });
+  await reloaded.initialize();
+  const url = new URL(await reloaded.begin({ redirectUri: 'http://127.0.0.1:18762/auth/callback', profileId: first.id }));
+  assert.equal(url.searchParams.get('ext_agent_host_id'), first.hostId);
+  assert.equal(url.searchParams.get('client_id'), first.clientId);
+  reloaded.cancel();
+  await reloaded.select(second.id);
+  const next = new URL(await reloaded.begin({ redirectUri: 'http://127.0.0.1:18762/auth/callback' }));
+  assert.equal(next.searchParams.get('ext_agent_host_id'), second.hostId);
+  assert.equal((await f.store.load()).profiles[0].hostId, first.hostId);
+});
+test('legacy shared host storage migrates once without changing tokens, models, labels or account selection', async t => {
+  const f = await fixture(t); await f.finish(await f.begin());
+  f.setClient('oaiapp_second'); await f.finish(await f.begin({ newProfile: true }));
+  const legacy = await f.store.load(); legacy.version = 1; legacy.hostId = 'urn:uuid:00000000-0000-4000-8000-000000000000';
+  delete legacy.hostRegistrations;
+  for (const profile of legacy.profiles) delete profile.hostId;
+  legacy.profiles[0].label = 'Existing account';
+  legacy.profiles[0].inferenceOptions = { serviceTier: 'fast', cyberAccessProgram: 'daybreak_blue' };
+  await f.store.save(legacy);
+  await f.auth.initialize();
+  const migrated = await f.store.load();
+  assert.equal(migrated.version, 2); assert.equal(migrated.hostId, undefined);
+  assert.equal(new Set(migrated.profiles.map(profile => profile.hostId)).size, 2);
+  for (const profile of migrated.profiles) {
+    assert.match(profile.hostId, /^urn:uuid:[0-9a-f-]{36}$/);
+    assert.notEqual(profile.hostId, legacy.hostId);
+  }
+  const withoutHosts = structuredClone(migrated);
+  for (const profile of withoutHosts.profiles) delete profile.hostId;
+  const expected = { ...legacy, version: 2 }; delete expected.hostId;
+  assert.deepEqual(withoutHosts, expected);
+  await f.auth.initialize();
+  assert.deepEqual(await f.store.load(), migrated);
+  assert.deepEqual((await f.auth.status()).profiles.map(profile => profile.label), ['Existing account', '']);
+});
+test('concurrent new registrations persist distinct host IDs before authorization and prune abandoned drafts', async t => {
+  const f = await fixture(t);
+  const second = new ChatGPTAuth({ store: new Store(f.store.directory), fetcher: f.fetcher, now: () => NOW });
+  const [one, two] = await Promise.all([
+    f.begin({ newProfile: true }),
+    second.begin({ redirectUri: 'http://127.0.0.1:18762/auth/callback', newProfile: true }).then(url => new URL(url)),
+  ]);
+  assert.notEqual(one.searchParams.get('ext_agent_host_id'), two.searchParams.get('ext_agent_host_id'));
+  const pending = await f.store.load();
+  for (const url of [one, two]) assert.equal(pending.hostRegistrations[url.searchParams.get('state')].hostId, url.searchParams.get('ext_agent_host_id'));
+  assert.deepEqual(pending.profiles, []);
+  f.auth.cancel(); second.cancel(); f.setNow(NOW + 11 * 60000);
+  const fresh = await f.begin({ newProfile: true });
+  assert.deepEqual(Object.keys((await f.store.load()).hostRegistrations), [fresh.searchParams.get('state')]);
+});
+test('a new-registration callback cannot bind another host to an existing client registration', async t => {
+  const f = await fixture(t); await f.finish(await f.begin());
+  const before = await f.store.load();
+  const url = await f.begin({ newProfile: true });
+  await assert.rejects(f.finish(url), /宿主不匹配/);
+  assert.deepEqual((await f.store.load()).profiles, before.profiles);
+});
+test('a failed code exchange retains the issued client and host for a later sign-in', async t => {
+  const f = await fixture(t), url = await f.begin();
+  const requestToken = f.auth.tokenRequest.bind(f.auth);
+  f.auth.tokenRequest = async () => { throw new Error('Synthetic token exchange failure'); };
+  await assert.rejects(f.finish(url), /exchange failure/);
+  const registration = (await f.store.load()).profiles[0];
+  assert.equal(registration.clientId, 'oaiapp_test');
+  assert.equal(registration.hostId, url.searchParams.get('ext_agent_host_id'));
+  assert.equal(registration.access_token, undefined);
+  assert.deepEqual((await f.store.load()).hostRegistrations, {});
+  f.auth.tokenRequest = requestToken;
+  const retry = await f.begin({ profileId: registration.id });
+  assert.equal(retry.searchParams.get('ext_agent_host_id'), registration.hostId);
+  await f.finish(retry);
+  assert.equal((await f.store.load()).profiles.length, 1);
+  assert.equal((await f.auth.access()).profileId, registration.id);
 });
 test('two auth instances serialize rotating refresh and preserve credentials on transient failure', async t => {
   const f = await fixture(t); await f.finish(await f.begin());
@@ -291,11 +379,11 @@ test('profile isolation and one-time desktop migration move rather than duplicat
   const destination = new Store(desktop.directory), source = await f.store.load();
   assert.equal(await destination.migrateLegacy(desktop.legacyDirectory), true);
   assert.equal(await readPrivateFile(f.store.path), undefined);
-  assert.equal((await destination.load()).hostId, source.hostId);
+  assert.equal((await destination.load()).profiles[0].hostId, source.profiles[0].hostId);
   assert.equal((await destination.load()).profiles[0].refresh_token, source.profiles[0].refresh_token);
   assert.equal(await destination.migrateLegacy(desktop.legacyDirectory), false);
   const other = new Store(web.directory); await other.transact(() => {});
-  assert.equal((await other.load()).profiles.length, 0); assert.notEqual((await other.load()).hostId, source.hostId);
+  assert.equal((await other.load()).profiles.length, 0); assert.equal((await other.load()).hostId, undefined);
 });
 
 test('management instances use different ports when the preferred port is occupied', async t => {

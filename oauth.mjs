@@ -1,4 +1,4 @@
-import { randomBytes, createHash, createPublicKey, verify, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, createHash, createPublicKey, verify, timingSafeEqual } from 'node:crypto';
 import { Store } from './storage.mjs';
 import { normalizeInferenceOptions } from './inference-options.mjs';
 export const ISSUER = 'https://auth.openai.com';
@@ -13,6 +13,21 @@ export const equalSecret = (a, b) => typeof a === 'string' && typeof b === 'stri
 const field = (value, label) => { if (typeof value !== 'string' || !value.trim()) throw new Error(`OpenAI 登录响应缺少 ${label}。`); return value; };
 const terminalRefresh = new Set(['invalid_grant', 'invalid_refresh_token', 'token_expired', 'refresh_token_expired', 'refresh_token_invalidated', 'refresh_token_reused']);
 const clearTokens = profile => { for (const key of ['access_token', 'refresh_token', 'id_token', 'expiresAt', 'earliestRefreshAt', 'scopes']) delete profile[key]; profile.models = []; };
+
+// Each saved account configuration owns one stable logical host. Migrate only
+// missing identifiers; credentials remain usable until the next authorization.
+function prepareAccountHosts(data) {
+  const used = new Set();
+  for (const profile of data.profiles) {
+    profile.hostId ??= `urn:uuid:${randomUUID()}`;
+    if (typeof profile.hostId !== 'string' || !profile.hostId || used.has(profile.hostId)) {
+      throw new Error('账号宿主标识无效或重复，未更改已保存的登录。');
+    }
+    used.add(profile.hostId);
+  }
+  data.version = 2;
+  delete data.hostId;
+}
 
 export function validateIdToken(jwt, { jwks, clientId, nonce, now = Date.now() }) {
   try {
@@ -91,7 +106,7 @@ export class ChatGPTAuth {
     return { access_token: field(token.access_token, 'access_token'), refresh_token: field(token.refresh_token, 'refresh_token'), id_token: token.id_token || previous?.id_token,
       expiresAt: this.now() + expires * 1000, earliestRefreshAt: Number.isFinite(earliest) ? earliest : 0, scopes, token_type: 'Bearer' };
   }
-  async initialize() { await this.store.transact(() => {}); }
+  async initialize() { await this.store.transact(prepareAccountHosts); }
   async status() {
     const data = await this.store.load();
     return { activeProfileId: data.activeProfileId, pending: !!this.pending && this.pending.expiresAt > this.now(), notice: this.notice,
@@ -103,12 +118,22 @@ export class ChatGPTAuth {
     const redirect = new URL(redirectUri);
     if (redirect.protocol !== 'http:' || redirect.hostname !== '127.0.0.1' || redirect.pathname !== '/auth/callback') throw new Error('登录回调必须使用 127.0.0.1。');
     if (this.pending && this.pending.expiresAt > this.now()) throw new Error('已有登录等待浏览器确认，请完成或取消后重试。');
-    const data = await this.store.load();
-    const profile = newProfile ? null : data.profiles.find(p => p.id === (profileId || data.activeProfileId));
-    if (profileId && !profile) throw new Error('所选登录记录不存在。');
-    const attempt = { state: random(), nonce: random(), verifier: random(), redirectUri, profileId: profile?.id, clientId: profile?.clientId,
-      hostId: data.hostId, expiresAt: this.now() + 10 * 60000, revision: ++this.loginRevision };
-    const params = new URLSearchParams({ client_id: profile?.clientId || 'dynamic_agent_client', ext_agent_host_id: data.hostId, response_type: 'code', redirect_uri: redirectUri,
+    const attempt = { state: random(), nonce: random(), verifier: random(), redirectUri,
+      expiresAt: this.now() + 10 * 60000, revision: ++this.loginRevision };
+    const profile = await this.store.transact(data => {
+      prepareAccountHosts(data);
+      const selected = newProfile ? null : data.profiles.find(p => p.id === (profileId || data.activeProfileId));
+      if (profileId && !selected) throw new Error('所选登录记录不存在。');
+      attempt.profileId = selected?.id; attempt.clientId = selected?.clientId;
+      attempt.hostId = selected?.hostId || `urn:uuid:${randomUUID()}`;
+      // Before an issued client ID exists, persist the new host against this
+      // attempt. Parallel registrations must never borrow each other's ID.
+      const drafts = Object.entries(data.hostRegistrations || {}).filter(([, draft]) => draft.expiresAt > this.now());
+      data.hostRegistrations = Object.fromEntries(drafts);
+      if (!selected) data.hostRegistrations[attempt.state] = { hostId: attempt.hostId, expiresAt: attempt.expiresAt };
+      return selected;
+    });
+    const params = new URLSearchParams({ client_id: profile?.clientId || 'dynamic_agent_client', ext_agent_host_id: attempt.hostId, response_type: 'code', redirect_uri: redirectUri,
       resource: RESOURCE, scope: SCOPES, state: attempt.state, nonce: attempt.nonce, code_challenge_method: 'S256', code_challenge: createHash('sha256').update(attempt.verifier).digest('base64url') });
     if (!profile) params.set('agent_name_hint', 'DeepSeek Harness');
     if (profile?.id_token) params.set('id_token_hint', profile.id_token);
@@ -131,7 +156,14 @@ export class ChatGPTAuth {
     const id = createHash('sha256').update(clientId).digest('hex').slice(0,24);
     // Retain the issued registration even if code exchange fails. No tokens are saved yet.
     await this.store.transact(data => {
-      if (!data.profiles.some(p => p.clientId === clientId)) data.profiles.push({ id, clientId, models: [] });
+      const profile = data.profiles.find(p => p.clientId === clientId);
+      if (profile) {
+        if (profile.hostId !== attempt.hostId || profile.id !== attempt.profileId) throw new Error('OpenAI 回调与所选账号宿主不匹配。');
+      } else {
+        if (attempt.clientId || data.hostRegistrations?.[attempt.state]?.hostId !== attempt.hostId) throw new Error('登录宿主注册已失效，请重试登录。');
+        data.profiles.push({ id, clientId, hostId: attempt.hostId, models: [] });
+      }
+      if (data.hostRegistrations) delete data.hostRegistrations[attempt.state];
     });
     const token = await this.tokenRequest({ grant_type: 'authorization_code', client_id: clientId, code, code_verifier: attempt.verifier, redirect_uri: attempt.redirectUri, resource: RESOURCE });
     const identity = await this.identity(token.id_token, clientId, attempt.nonce);
