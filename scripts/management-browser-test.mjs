@@ -1,6 +1,11 @@
 // Requires Playwright and a browser. OAuth is mocked; no real credentials or external requests.
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { startManagement } from '../management.mjs';
+import { ChatGPTAuth, PLAN_SCOPE } from '../oauth.mjs';
+import { Store } from '../storage.mjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) });
 const cases = [
@@ -60,6 +65,103 @@ try {
       await context.close();
       manager.close();
     }
+  }
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-inference-browser-test-'));
+  let manager, context;
+  try {
+    const store = new Store(directory);
+    const defaults = { serviceTier: 'auto', cyberAccessProgram: 'auto' };
+    const firstOptions = { serviceTier: 'fast', cyberAccessProgram: 'daybreak_blue' };
+    const secondOptions = { serviceTier: 'default', cyberAccessProgram: 'daybreak_red' };
+    await store.transact(data => {
+      data.activeProfileId = 'first';
+      data.profiles = ['first', 'second'].map(id => ({
+        id, clientId: 'synthetic-' + id, email: id + '@example.invalid', label: id === 'first' ? '测试账号 A' : '测试账号 B',
+        access_token: 'synthetic-access-' + id, expiresAt: Date.now() + 3600000, scopes: [PLAN_SCOPE],
+        models: [{ slug: 'synthetic-model', visibility: 'list' }],
+      }));
+    });
+    let rejectSave = false, externalRequests = 0;
+    const start = async () => {
+      const auth = new ChatGPTAuth({ store: new Store(directory), fetcher: () => {
+        externalRequests++;
+        throw new Error('Unexpected external request in browser fixture');
+      } });
+      auth.notice = '此前的登录状态提示。';
+      const save = auth.configureInference.bind(auth);
+      auth.configureInference = async (id, options) => {
+        if (rejectSave) throw new Error('模拟保存失败，请重试。');
+        await save(id, options);
+      };
+      return startManagement(auth, { port: 0 });
+    };
+    manager = await start();
+    context = await browser.newContext();
+    await context.route('**/*', route => route.request().url().startsWith(manager.origin + '/') ? route.continue() : route.abort());
+    const page = await context.newPage();
+    const card = id => page.locator('article[data-profile-id="' + id + '"]');
+    const speed = id => card(id).getByRole('combobox', { name: '速度', exact: true });
+    const daybreak = id => card(id).getByRole('combobox', { name: 'Daybreak', exact: true });
+    const open = async () => {
+      const loaded = page.waitForResponse(r => r.url() === manager.origin + '/api/status');
+      await page.goto(manager.origin);
+      await loaded;
+      await speed('first').waitFor();
+    };
+    const values = async id => ({ serviceTier: await speed(id).inputValue(), cyberAccessProgram: await daybreak(id).inputValue() });
+    const save = async (id, options) => {
+      await speed(id).selectOption(options.serviceTier);
+      await daybreak(id).selectOption(options.cyberAccessProgram);
+      const refreshed = page.waitForResponse(r => r.url() === manager.origin + '/api/status');
+      const [response] = await Promise.all([
+        page.waitForResponse(r => r.url() === manager.origin + '/api/inference'),
+        card(id).getByRole('button', { name: '保存推理设置', exact: true }).click(),
+      ]);
+      assert.equal(response.status(), 200);
+      assert.deepEqual(response.request().postDataJSON(), { id, options });
+      await refreshed;
+      await page.getByText('推理设置已保存，仅用于该账号后续请求；服务端支持尚未验证。', { exact: true }).waitFor();
+    };
+    await open();
+    assert.deepEqual(await values('first'), defaults);
+    assert.deepEqual(await values('second'), defaults);
+    await save('first', firstOptions);
+    assert.deepEqual((await store.load()).profiles.find(p => p.id === 'first').inferenceOptions, firstOptions);
+    assert.deepEqual(await values('second'), defaults);
+    await save('second', secondOptions);
+    assert.deepEqual((await store.load()).profiles.find(p => p.id === 'first').inferenceOptions, firstOptions);
+    assert.deepEqual((await store.load()).profiles.find(p => p.id === 'second').inferenceOptions, secondOptions);
+
+    // A new auth instance and management server must load the saved settings.
+    manager.close();
+    manager = await start();
+    await open();
+    assert.deepEqual(await values('first'), firstOptions);
+    assert.deepEqual(await values('second'), secondOptions);
+    if (process.env.MANAGEMENT_TEST_SCREENSHOT) await page.screenshot({ path: process.env.MANAGEMENT_TEST_SCREENSHOT, fullPage: true });
+
+    rejectSave = true;
+    await speed('first').selectOption('default');
+    await daybreak('first').selectOption('standard');
+    const [failed] = await Promise.all([
+      page.waitForResponse(r => r.url() === manager.origin + '/api/inference'),
+      card('first').getByRole('button', { name: '保存推理设置', exact: true }).click(),
+    ]);
+    assert.equal(failed.status(), 400);
+    await page.getByText('模拟保存失败，请重试。', { exact: true }).waitFor();
+    assert.deepEqual((await store.load()).profiles.find(p => p.id === 'first').inferenceOptions, firstOptions);
+    rejectSave = false;
+    await open();
+    assert.deepEqual(await values('first'), firstOptions);
+    await save('first', defaults);
+    assert.deepEqual((await store.load()).profiles.find(p => p.id === 'first').inferenceOptions, defaults);
+    assert.deepEqual(await values('second'), secondOptions);
+    assert.equal(externalRequests, 0);
+    results.push({ case: 'inference-settings', saved: true, restartPersistence: true, accountIsolation: true, failureShown: true, resetDefaults: true, externalRequests });
+  } finally {
+    await context?.close();
+    manager?.close();
+    await rm(directory, { recursive: true, force: true });
   }
   console.log(JSON.stringify({ success: true, realBrowser: true, oauth: 'mocked', cases: results }, null, 2));
 } finally {

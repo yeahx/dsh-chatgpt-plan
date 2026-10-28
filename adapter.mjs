@@ -1,14 +1,22 @@
 import { readPrivateFileSync } from './storage.mjs';
 import { PLAN_SCOPE, RESOURCE } from './oauth.mjs';
+import { normalizeInferenceOptions } from './inference-options.mjs';
 export const PROVIDER = 'chatgpt-plan';
 export const DISPLAY_NAME = 'ChatGPT 套餐（独立授权）';
 const LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-const UNSUPPORTED = ['background', 'conversation', 'max_output_tokens', 'max_tool_calls', 'metadata', 'moderation', 'multi_agent', 'prompt', 'prompt_cache_retention', 'prompt_cache_options', 'service_tier', 'safety_identifier', 'temperature', 'top_logprobs', 'top_p', 'truncation', 'user', 'previous_response_id'];
+const UNSUPPORTED = ['background', 'conversation', 'max_output_tokens', 'max_tool_calls', 'metadata', 'moderation', 'multi_agent', 'prompt', 'prompt_cache_retention', 'prompt_cache_options', 'safety_identifier', 'temperature', 'top_logprobs', 'top_p', 'truncation', 'user', 'previous_response_id'];
 
 /** Enforce the documented direct-plan route contract after pi-ai builds a request. */
-export function planPayload(input) {
+export function planPayload(input, options) {
+  const { serviceTier, cyberAccessProgram } = normalizeInferenceOptions(options);
   const out = { ...input, store: false, stream: true };
   for (const key of UNSUPPORTED) delete out[key];
+  // Only the selected account's explicit preferences may opt in. The public
+  // API documents these fields; availability on the plan route is experimental.
+  delete out.service_tier;
+  delete out.access_programs;
+  if (serviceTier !== 'auto') out.service_tier = serviceTier;
+  if (cyberAccessProgram !== 'auto') out.access_programs = { cyber: cyberAccessProgram };
   if (!Array.isArray(out.input)) throw new Error('ChatGPT 套餐请求必须携带完整消息数组。');
   out.input = out.input.map(item => item.role === 'system' ? { ...item, role: 'developer' } : item);
   if (out.tools?.length) {
@@ -47,14 +55,15 @@ export function createAdapter({ PiAiAdapter, responses, resolveImageAttachmentAc
     let account;
     try { const data = JSON.parse(readPrivateFileSync(auth.store.path)); account = data.profiles.find(p => p.id === data.activeProfileId); } catch {}
     const entries = account?.access_token && account.scopes?.includes(PLAN_SCOPE) ? account.models || [] : [];
-    const stamp = JSON.stringify([auth.generation, account?.id, entries]);
+    const inferenceOptions = normalizeInferenceOptions(account?.inferenceOptions);
+    const stamp = JSON.stringify([auth.generation, account?.id, entries, inferenceOptions]);
     if (profiles && fingerprint === stamp) return profiles;
     const profileId = account?.id;
     const sessionSignal = auth.requestController.signal;
     const models = catalogModels(entries);
     const optionsFor = options => ({ ...options,
       signal: options?.signal ? AbortSignal.any([options.signal, sessionSignal]) : sessionSignal,
-      onPayload: planPayload,
+      onPayload: payload => planPayload(payload, inferenceOptions),
       fetch: (input, init) => auth.fetchInference(profileId, input, { ...init,
         signal: init?.signal ? AbortSignal.any([init.signal, sessionSignal]) : sessionSignal }),
     });

@@ -1,5 +1,6 @@
 import { randomBytes, createHash, createPublicKey, verify, timingSafeEqual } from 'node:crypto';
 import { Store } from './storage.mjs';
+import { normalizeInferenceOptions } from './inference-options.mjs';
 export const ISSUER = 'https://auth.openai.com';
 export const RESOURCE = 'https://api.openai.com/v1';
 export const AUTHORIZE = `${ISSUER}/api/accounts/authorize`;
@@ -95,6 +96,7 @@ export class ChatGPTAuth {
     const data = await this.store.load();
     return { activeProfileId: data.activeProfileId, pending: !!this.pending && this.pending.expiresAt > this.now(), notice: this.notice,
       profiles: data.profiles.map(p => ({ id: p.id, clientId: p.clientId, label: p.label || '', email: p.email, connected: !!(p.id_token || p.access_token), planEnabled: !!p.access_token && !!p.scopes?.includes(PLAN_SCOPE), models: (p.models || []).map(m => ({ slug: m.slug, display_name: m.display_name })), expiresAt: p.expiresAt,
+        inferenceOptions: normalizeInferenceOptions(p.inferenceOptions),
         refreshWarning: this.refreshFailures.has(p.id) ? (p.expiresAt > this.now() ? '暂时无法续期；仍有效的登录可继续使用，稍后会重试。' : '登录已到期，续期暂时失败；请检查网络后重试。') : '' })) };
   }
   async begin({ redirectUri, profileId, newProfile = false, enablePlan = false } = {}) {
@@ -249,6 +251,18 @@ export class ChatGPTAuth {
   async rename(id, label) {
     if (typeof label !== 'string' || label.length > 64 || /[\x00-\x1f\x7f]/.test(label)) throw new Error('账号备注最多 64 个字符，不能包含控制字符。');
     await this.store.transact(data => { const p = data.profiles.find(p => p.id === id); if (!p) throw new Error('登录记录不存在。'); p.label = label.trim(); });
+    this.onChange();
+  }
+  async configureInference(id, options) {
+    if (options === undefined) throw new Error('缺少推理设置。');
+    const selected = normalizeInferenceOptions(options);
+    await this.store.transact(data => {
+      const profile = data.profiles.find(p => p.id === id);
+      if (!profile) throw new Error('登录记录不存在。');
+      profile.inferenceOptions = selected;
+    });
+    // New streams use a new adapter profile; existing streams and any token
+    // renewal replay keep their original request choices.
     this.onChange();
   }
   async signOut(id) {

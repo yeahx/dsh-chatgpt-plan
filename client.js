@@ -46,7 +46,7 @@ window.__ModuleLoader__.load({ id: 'dsh-chatgpt-plan', factory: require => {
       error && h('p', null, error),
       state?.notice && h('p', null, state.notice),
       config
-        ? h('a', { href: config.origin, target: '_blank', rel: 'noreferrer', style: linkStyle }, current?.connected ? '添加 / 切换账号与网络设置' : 'Continue with ChatGPT')
+        ? h('a', { href: config.origin, target: '_blank', rel: 'noreferrer', style: linkStyle }, current?.connected ? '管理账号、网络与推理设置' : 'Continue with ChatGPT')
         : h('button', { disabled: true, style: linkStyle }, '正在连接账号管理服务…'),
       h('a', { href: 'https://chatgpt.com/settings/usage', target: '_blank', rel: 'noreferrer', style: linkStyle }, '管理用量与额度'),
       h('p', { style: { fontSize: 12, opacity: .7 } }, '在账号管理页完成浏览器授权后，回到会话模型菜单选择“ChatGPT 套餐（独立授权）”。')

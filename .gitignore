@@ -8,6 +8,7 @@
 !/package.json
 !/index.mjs
 !/adapter.mjs
+!/inference-options.mjs
 !/oauth.mjs
 !/network.mjs
 !/storage.mjs
@@ -28,3 +29,4 @@
 /test/*
 !/test/integration.test.mjs
 !/test/client.test.mjs
+!/test/inference.test.mjs

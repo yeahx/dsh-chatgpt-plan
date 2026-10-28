@@ -26,7 +26,7 @@
 
 ## 安装
 
-本分支的插件版本为 **0.1.4**。请使用 **`dsh-chatgpt-plan-0.1.4.tgz`**；若 [Releases](https://github.com/WillQvQ/dsh-chatgpt-plan/releases) 尚未提供该版本，请按下方[从源码打包与开发](#从源码打包与开发)从包含本修复的检出版本打包。GitHub 自动生成的 Source code 压缩包用于查看源码，不能直接当作插件包安装。
+本功能分支的插件版本仍为 **0.1.4**，尚未发布 Release。请按下方[从源码打包与开发](#从源码打包与开发)构建 **`dsh-chatgpt-plan-0.1.4.tgz`**；历史同版本安装包不包含本分支的 Fast / Daybreak 选项。GitHub 自动生成的 Source code 压缩包用于查看源码，不能直接当作插件包安装。
 
 先完全退出 DSH。在 macOS 终端执行以下命令（假设文件保存在下载目录，App 安装在 `/Applications`）：
 
@@ -58,6 +58,26 @@
 切换会中止旧账号正在进行的请求，并刷新模型列表。每个注册独立保存凭证和模型，即使邮箱相同也不会合并；一次只有一个当前账号。插件不会自动轮换账号、合并额度，或在失败、退出后改用其他账号。
 
 切换账号不会清空 DSH 已有会话。如需隔离聊天内容，请新建会话。
+
+## Fast / Daybreak 推理设置（实验性）
+
+此功能是 [fork 分支 `codex/fast-daybreak-controls`](https://github.com/yeahx/dsh-chatgpt-plan/tree/codex/fast-daybreak-controls) 的预览，包版本仍为 **0.1.4**，尚未发布为 Release。需要从该分支按下方源码打包说明构建；已有的同版本安装包不一定包含这些选项。
+
+从 DSH 设置打开 **管理账号、网络与推理设置**，在对应账号卡片的 **推理设置（实验性）** 中选择速度和 Daybreak 模式，再点击 **保存推理设置**。选项按账号独立保存，用于该账号后续请求，不会中断正在返回的回复。
+
+| 选项 | 请求行为 |
+| --- | --- |
+| 速度：默认（跟随服务端） | 省略 `service_tier` |
+| 速度：标准 | `service_tier: "default"` |
+| 速度：Fast | `service_tier: "fast"` |
+| Daybreak：默认（跟随服务端） | 省略 `access_programs` |
+| Daybreak：关闭 | `access_programs.cyber: "standard"` |
+| Daybreak：Daybreak Blue | `access_programs.cyber: "daybreak_blue"` |
+| Daybreak：Daybreak Red | `access_programs.cyber: "daybreak_red"` |
+
+两个选项初始均为“默认”，保持原有请求行为。Fast 可能增加额度消耗，实际速度、额度和可用性由 OpenAI 决定。Fast 和 Daybreak 都需要账号与所选模型支持；保存成功只表示本地设置已保存，不表示服务端已验证。选择 Daybreak 不会授予权限，Blue / Red 请求值需要匹配模型，插件不会根据账号获批等级自动推断或更换模型，也不会因不支持而静默降档重试。遇到相关服务端错误时，请手动调整选项或恢复“默认”。
+
+字段依据 [OpenAI Fast mode 文档](https://developers.openai.com/api/docs/guides/fast-mode)和 [Daybreak 文档](https://developers.openai.com/api/docs/guides/daybreak)。这些 API 文档不构成本插件通过 Sign in with ChatGPT（SIWC）OAuth 使用套餐时的能力承诺；**本功能尚未验证真实 SIWC 账号的 Fast / Daybreak 推理支持**，也不会改用 API Key 计费。套餐接口仍受 [SIWC 预览限制](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)约束。
 
 ## 网络设置
 
@@ -198,7 +218,7 @@ Agent 循环、工具执行、文件权限、会话存储、插件系统和界�
 使用 Node.js 22 或更高版本（本次验证使用 Node.js 24）。没有编译步骤：
 
 ```sh
-git clone https://github.com/WillQvQ/dsh-chatgpt-plan.git
+git clone --branch codex/fast-daybreak-controls https://github.com/yeahx/dsh-chatgpt-plan.git
 cd dsh-chatgpt-plan
 npm test
 npm pack --ignore-scripts
@@ -225,7 +245,7 @@ ELECTRON_RUN_AS_NODE=1 "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSe
 PLAYWRIGHT_CHANNEL=msedge node scripts/management-browser-test.mjs
 ```
 
-若 Playwright 位于其他目录，可用 `PLAYWRIGHT_MODULE` 指定其模块入口的绝对路径或 `file:` URL。该测试用真实浏览器验证添加账号、重新登录、授权套餐三个表单，以及回调后的来源信息保护；授权服务使用本地模拟，不读取真实账号或消耗套餐额度。
+若 Playwright 位于其他目录，可用 `PLAYWRIGHT_MODULE` 指定其模块入口的绝对路径或 `file:` URL。该测试用真实浏览器验证添加账号、重新登录、授权套餐三个表单，以及回调后的来源信息保护；还使用临时账号存储验证推理选项保存、服务重启后的持久化、两个账号隔离、恢复默认及保存失败提示。授权服务使用本地模拟，不读取真实账号或消耗套餐额度。
 
 ## 许可与图标
 
