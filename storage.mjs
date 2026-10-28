@@ -54,10 +54,11 @@ export class Store {
   constructor(directory = defaultDirectory()) { this.directory = directory; this.path = join(directory, 'accounts.json'); }
   async load() {
     const text = await readPrivateFile(this.path);
-    if (text === undefined) return { version: 1, hostId: `urn:uuid:${randomUUID()}`, activeProfileId: null, profiles: [] };
+    if (text === undefined) return { version: 2, activeProfileId: null, profiles: [] };
     try {
       const value = JSON.parse(text);
-      if (value.version !== 1 || typeof value.hostId !== 'string' || !Array.isArray(value.profiles)) throw new Error();
+      if (![1, 2].includes(value.version) || !Array.isArray(value.profiles)
+        || (value.version === 1 && typeof value.hostId !== 'string')) throw new Error();
       return value;
     } catch (error) {
       throw new Error('DSH 的 ChatGPT 登录文件无法读取；为保护现有账号，未覆盖文件。');
