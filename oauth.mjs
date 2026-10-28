@@ -52,7 +52,7 @@ export function validateIdToken(jwt, { jwks, clientId, nonce, now = Date.now() }
 
 export class ChatGPTAuth {
   constructor({ store = new Store(), fetcher = fetch, now = Date.now, onChange = () => {} } = {}) {
-    this.store = store; this.fetcher = fetcher; this.now = now; this.onChange = onChange; this.pending = null;
+    this.store = store; this.fetcher = fetcher; this.now = now; this.onChange = onChange; this.pending = null; this.preparingLogin = null;
     this.requestController = new AbortController(); this.notice = ''; this.generation = 0; this.loginRevision = 0;
     this.refreshes = new Map(); this.refreshFailures = new Map(); this.preemptMs = 300000;
   }
@@ -117,32 +117,39 @@ export class ChatGPTAuth {
   async begin({ redirectUri, profileId, newProfile = false, enablePlan = false } = {}) {
     const redirect = new URL(redirectUri);
     if (redirect.protocol !== 'http:' || redirect.hostname !== '127.0.0.1' || redirect.pathname !== '/auth/callback') throw new Error('登录回调必须使用 127.0.0.1。');
-    if (this.pending && this.pending.expiresAt > this.now()) throw new Error('已有登录等待浏览器确认，请完成或取消后重试。');
+    if (this.preparingLogin || (this.pending && this.pending.expiresAt > this.now())) throw new Error('已有登录正在准备或等待浏览器确认，请完成或取消后重试。');
     const attempt = { state: random(), nonce: random(), verifier: random(), redirectUri,
-      expiresAt: this.now() + 10 * 60000, revision: ++this.loginRevision };
-    const profile = await this.store.transact(data => {
-      prepareAccountHosts(data);
-      const selected = newProfile ? null : data.profiles.find(p => p.id === (profileId || data.activeProfileId));
-      if (profileId && !selected) throw new Error('所选登录记录不存在。');
-      attempt.profileId = selected?.id; attempt.clientId = selected?.clientId;
-      attempt.hostId = selected?.hostId || `urn:uuid:${randomUUID()}`;
-      // Before an issued client ID exists, persist the new host against this
-      // attempt. Parallel registrations must never borrow each other's ID.
-      const drafts = Object.entries(data.hostRegistrations || {}).filter(([, draft]) => draft.expiresAt > this.now());
-      data.hostRegistrations = Object.fromEntries(drafts);
-      if (!selected) data.hostRegistrations[attempt.state] = { hostId: attempt.hostId, expiresAt: attempt.expiresAt };
-      return selected;
-    });
-    const params = new URLSearchParams({ client_id: profile?.clientId || 'dynamic_agent_client', ext_agent_host_id: attempt.hostId, response_type: 'code', redirect_uri: redirectUri,
-      resource: RESOURCE, scope: SCOPES, state: attempt.state, nonce: attempt.nonce, code_challenge_method: 'S256', code_challenge: createHash('sha256').update(attempt.verifier).digest('base64url') });
-    if (!profile) params.set('agent_name_hint', 'DeepSeek Harness');
-    if (profile?.id_token) params.set('id_token_hint', profile.id_token);
-    if (profile?.email) params.set('login_hint', profile.email);
-    if (enablePlan && profile) params.set('prompt', 'consent');
-    this.pending = attempt; this.notice = '';
-    return `${AUTHORIZE}?${params}`;
+      expiresAt: this.now() + 10 * 60000, revision: this.loginRevision };
+    // Reserve this instance synchronously, before storage yields. Publish a
+    // revision only with a ready pending login; failed starts change neither.
+    this.preparingLogin = attempt;
+    try {
+      const profile = await this.store.transact(data => {
+        prepareAccountHosts(data);
+        const selected = newProfile ? null : data.profiles.find(p => p.id === (profileId || data.activeProfileId));
+        if (profileId && !selected) throw new Error('所选登录记录不存在。');
+        attempt.profileId = selected?.id; attempt.clientId = selected?.clientId;
+        attempt.hostId = selected?.hostId || `urn:uuid:${randomUUID()}`;
+        // Before an issued client ID exists, persist the new host against this
+        // attempt. Parallel registrations must never borrow each other's ID.
+        const drafts = Object.entries(data.hostRegistrations || {}).filter(([, draft]) => draft.expiresAt > this.now());
+        data.hostRegistrations = Object.fromEntries(drafts);
+        if (!selected) data.hostRegistrations[attempt.state] = { hostId: attempt.hostId, expiresAt: attempt.expiresAt };
+        return selected;
+      });
+      if (this.preparingLogin !== attempt || attempt.revision !== this.loginRevision) throw new Error('登录已取消或账号已切换，请重试登录。');
+      const params = new URLSearchParams({ client_id: profile?.clientId || 'dynamic_agent_client', ext_agent_host_id: attempt.hostId, response_type: 'code', redirect_uri: redirectUri,
+        resource: RESOURCE, scope: SCOPES, state: attempt.state, nonce: attempt.nonce, code_challenge_method: 'S256', code_challenge: createHash('sha256').update(attempt.verifier).digest('base64url') });
+      if (!profile) params.set('agent_name_hint', 'DeepSeek Harness');
+      if (profile?.id_token) params.set('id_token_hint', profile.id_token);
+      if (profile?.email) params.set('login_hint', profile.email);
+      if (enablePlan && profile) params.set('prompt', 'consent');
+      attempt.revision = ++this.loginRevision;
+      this.pending = attempt; this.notice = '';
+      return `${AUTHORIZE}?${params}`;
+    } finally { if (this.preparingLogin === attempt) this.preparingLogin = null; }
   }
-  cancel() { this.pending = null; this.loginRevision++; }
+  cancel() { this.pending = null; this.preparingLogin = null; this.loginRevision++; }
   async callback(url) {
     const attempt = this.pending;
     if (!attempt || attempt.expiresAt <= this.now() || url.searchParams.getAll('state').length !== 1 || !equalSecret(url.searchParams.get('state'), attempt.state)) throw new Error('登录请求已过期或 state 不匹配，请重新开始登录。');

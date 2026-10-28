@@ -74,6 +74,60 @@ test('callback verifies state before denial, rejects client substitution and con
   const again = await f.begin(); await assert.rejects(f.finish(again, { client_id: 'oaiapp_impostor' }), /身份/);
   assert.equal((await f.store.load()).profiles[0].clientId, 'oaiapp_test');
 });
+test('concurrent login preparation cannot replace or invalidate the pending login', async t => {
+  const f = await fixture(t), transact = f.store.transact.bind(f.store);
+  let release, entered, transactions = 0;
+  const gate = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  f.store.transact = async fn => { transactions++; if (transactions === 1) { entered(); await gate; } return transact(fn); };
+  const revision = f.auth.loginRevision, first = f.begin();
+  try {
+    await started;
+    await assert.rejects(f.begin({ newProfile: true }), /已有登录/);
+    await assert.rejects(f.begin({ profileId: 'missing' }), /已有登录/);
+    assert.equal(transactions, 1);
+    assert.equal(f.auth.loginRevision, revision);
+    release();
+    const url = await first;
+    assert.equal(f.auth.pending.revision, f.auth.loginRevision);
+    f.store.transact = transact;
+    await f.finish(url);
+    assert.equal((await f.auth.access()).profileId, (await f.store.load()).activeProfileId);
+  } finally { release(); await first.catch(() => {}); f.store.transact = transact; }
+});
+test('failed login preparation does not cancel an authorization already exchanging tokens', async t => {
+  const f = await fixture(t), requestToken = f.auth.tokenRequest.bind(f.auth);
+  const url = await f.begin();
+  let release, entered;
+  const gate = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  f.auth.tokenRequest = async params => { entered(); await gate; return requestToken(params); };
+  const completing = f.finish(url), revision = f.auth.loginRevision;
+  try {
+    await started;
+    await assert.rejects(f.begin({ profileId: 'missing' }), /不存在/);
+    assert.equal(f.auth.loginRevision, revision);
+    release(); await completing;
+    assert.equal((await f.auth.status()).profiles[0].planEnabled, true);
+  } finally { release(); await completing.catch(() => {}); }
+});
+test('cancel during login preparation cannot install a late pending login and allows retry', async t => {
+  const f = await fixture(t), transact = f.store.transact.bind(f.store);
+  let release, entered;
+  const gate = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  f.store.transact = async fn => { entered(); await gate; return transact(fn); };
+  const preparing = f.begin();
+  // Attach the rejection handler before releasing the held operation.
+  const rejected = assert.rejects(preparing, /已取消|已切换/);
+  try {
+    await started; f.auth.cancel(); release(); await rejected;
+    assert.equal(f.auth.pending, null); assert.equal(f.calls.length, 0);
+    f.store.transact = transact;
+    await f.finish(await f.begin());
+    assert.equal((await f.auth.status()).profiles[0].planEnabled, true);
+  } finally { release(); await rejected.catch(() => {}); f.store.transact = transact; }
+});
 test('ID token signature, issuer, audience, nonce, expiry and identity are enforced', () => {
   const options = { jwks: { keys: [jwk] }, clientId: 'oaiapp_test', nonce: 'nonce', now: NOW };
   assert.equal(validateIdToken(jwt('oaiapp_test', 'nonce'), options).subject, 'account-one');
